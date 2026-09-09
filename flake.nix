@@ -17,11 +17,25 @@
     }:
     let
       configuration = { ... }: {
-        nix.settings.experimental-features = "nix-command flakes";
-        system.configurationRevision = self.rev or self.dirtyRev or null;
-        system.stateVersion = 6;
-        nixpkgs.hostPlatform = "aarch64-darwin";
-        nixpkgs.config.allowUnfree = true;
+        nix.settings = {
+          experimental-features = "nix-command flakes";
+          trusted-users = [
+            "root"
+            "simon"
+          ];
+          # We have the store on a case-sensitive APFS.
+          use-case-hack = false;
+        };
+
+        system = {
+          configurationRevision = self.rev or self.dirtyRev or null;
+          stateVersion = 6;
+        };
+
+        nixpkgs = {
+          hostPlatform = "aarch64-darwin";
+          config.allowUnfree = true;
+        };
 
         system.primaryUser = "simon";
         users.users.simon = {
