@@ -43,6 +43,11 @@ in
       enableBashIntegration = true;
       enableZshIntegration = true;
       nix-direnv.enable = true;
+      config = {
+        whitelist = {
+          prefix = [ "/Volumes/Projects" ];
+        };
+      };
     };
 
     starship.enable = true;
