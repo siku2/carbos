@@ -68,16 +68,17 @@ in
 
     codex = {
       enable = true;
-      settings = {
-        approvals_reviewer = "auto_review";
+      # TODO: blocked by https://github.com/nix-community/home-manager/issues/9397
+      # settings = {
+      #   approvals_reviewer = "auto_review";
 
-        model = "gpt-6-astra";
-        model_reasoning_effort = "low";
+      #   model = "gpt-6-astra";
+      #   model_reasoning_effort = "low";
 
-        features = {
-          prevent_idle_sleep = true;
-        };
-      };
+      #   features = {
+      #     prevent_idle_sleep = true;
+      #   };
+      # };
     };
 
     claude-code = {
