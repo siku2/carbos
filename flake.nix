@@ -3,19 +3,48 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-26.05-darwin";
-    nix-darwin.url = "github:nix-darwin/nix-darwin/nix-darwin-26.05";
-    nix-darwin.inputs.nixpkgs.follows = "nixpkgs";
-    home-manager.url = "github:nix-community/home-manager/release-26.05";
+    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    nix-darwin = {
+      url = "github:nix-darwin/nix-darwin/nix-darwin-26.05";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    home-manager = {
+      url = "github:nix-community/home-manager/release-26.05";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
     inputs@{
       self,
       nixpkgs,
+      nixpkgs-unstable,
       nix-darwin,
       home-manager,
     }:
     let
+      unstablePkgs = import nixpkgs-unstable {
+        system = "aarch64-darwin";
+        config.allowUnfree = true;
+      };
+
+      overlay = final: prev: {
+        codex = unstablePkgs.codex;
+
+        cargo-clean-all = prev.rustPlatform.buildRustPackage {
+          pname = "cargo-clean-all";
+          version = "0.6.5";
+
+          src = prev.fetchFromGitHub {
+            owner = "dnlmlr";
+            repo = "cargo-clean-all";
+            rev = "v0.6.5";
+            hash = "sha256-CJzjw/g0Ap7TKC2m+bVlH+/iCUOQITmE6HGvrNzWQ3o=";
+          };
+          cargoHash = "sha256-9Qv2/XacE82AtZCZS5vtSeVdnD6Ugs+Qn/EVevMndQM=";
+        };
+      };
+
       configuration = { ... }: {
         nix = {
           settings = {
@@ -42,6 +71,7 @@
         nixpkgs = {
           hostPlatform = "aarch64-darwin";
           config.allowUnfree = true;
+          overlays = [ overlay ];
         };
 
         system.primaryUser = "simon";

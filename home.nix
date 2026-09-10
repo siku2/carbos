@@ -1,18 +1,5 @@
 { pkgs, ... }:
 let
-  cargo-clean-all = pkgs.rustPlatform.buildRustPackage {
-    pname = "cargo-clean-all";
-    version = "0.6.5";
-
-    src = pkgs.fetchFromGitHub {
-      owner = "dnlmlr";
-      repo = "cargo-clean-all";
-      rev = "v0.6.5";
-      hash = "sha256-CJzjw/g0Ap7TKC2m+bVlH+/iCUOQITmE6HGvrNzWQ3o=";
-    };
-    cargoHash = "sha256-9Qv2/XacE82AtZCZS5vtSeVdnD6Ugs+Qn/EVevMndQM=";
-  };
-
   claude-plugins-official = pkgs.fetchFromGitHub {
     owner = "anthropics";
     repo = "claude-plugins-official";
