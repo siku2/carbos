@@ -28,10 +28,24 @@ in
     git = {
       enable = true;
       lfs.enable = true;
+      ignores = [
+        ".DS_Store"
+      ];
       settings = {
-        user.signingKey = "BAA343801A190591C8667BDFDA52A1F326E417A2";
+        user = {
+          name = "Simon Berger";
+          email = "simon.berger@inomotech.com";
+          signingKey = "BAA343801A190591C8667BDFDA52A1F326E417A2";
+        };
         commit.gpgSign = true;
-        tag.gpgSign = true;
+        tag = {
+          gpgSign = true;
+          forceSignAnnotated = true;
+        };
+        push.gpgSign = "if-asked";
+        credential.helper = "osxkeychain";
+        init.defaultBranch = "main";
+        rerere.enabled = true;
       };
     };
 
