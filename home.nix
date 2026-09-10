@@ -68,6 +68,16 @@ in
 
     codex = {
       enable = true;
+      settings = {
+        approvals_reviewer = "auto_review";
+
+        model = "gpt-6-astra";
+        model_reasoning_effort = "low";
+
+        features = {
+          prevent_idle_sleep = true;
+        };
+      };
     };
 
     claude-code = {
