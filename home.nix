@@ -52,6 +52,7 @@ in
     claude-code = {
       enable = true;
       plugins = [
+        "${claude-plugins-official}/plugins/frontend-design"
         "${claude-plugins-official}/plugins/rust-analyzer-lsp"
         (pkgs.fetchFromGitHub {
           owner = "openai";
