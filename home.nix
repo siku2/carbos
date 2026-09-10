@@ -45,6 +45,10 @@ in
       };
     };
 
+    codex = {
+      enable = true;
+    };
+
     claude-code = {
       enable = true;
       plugins = [ "${claude-plugins-official}/plugins/rust-analyzer-lsp" ];
