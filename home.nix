@@ -51,7 +51,15 @@ in
 
     claude-code = {
       enable = true;
-      plugins = [ "${claude-plugins-official}/plugins/rust-analyzer-lsp" ];
+      plugins = [
+        "${claude-plugins-official}/plugins/rust-analyzer-lsp"
+        (pkgs.fetchFromGitHub {
+          owner = "openai";
+          repo = "codex-plugin-cc";
+          rev = "db52e28f4d9ded852ab3942cea316258ae4ef346";
+          hash = "sha256-BkkIWwbGj8RtGFCXY3+McPzLmP9pYhWMAmpZsVUMi4M=";
+        })
+      ];
       settings = {
         env = {
           CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY = "1";
