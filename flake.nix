@@ -17,14 +17,21 @@
     }:
     let
       configuration = { ... }: {
-        nix.settings = {
-          experimental-features = "nix-command flakes";
-          trusted-users = [
-            "root"
-            "simon"
-          ];
-          # We have the store on a case-sensitive APFS.
-          use-case-hack = false;
+        nix = {
+          settings = {
+            experimental-features = "nix-command flakes";
+            trusted-users = [
+              "root"
+              "simon"
+            ];
+            # We have the store on a case-sensitive APFS.
+            use-case-hack = false;
+          };
+
+          gc = {
+            automatic = true;
+            options = "--delete-older-than 14d";
+          };
         };
 
         system = {
