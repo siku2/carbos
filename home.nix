@@ -28,7 +28,14 @@ in
     git = {
       enable = true;
       lfs.enable = true;
+      settings = {
+        user.signingKey = "BAA343801A190591C8667BDFDA52A1F326E417A2";
+        commit.gpgSign = true;
+        tag.gpgSign = true;
+      };
     };
+
+    gpg.enable = true;
 
     direnv = {
       enable = true;
@@ -99,4 +106,11 @@ in
     wget
     yq
   ];
+
+  services.gpg-agent = {
+    enable = true;
+    pinentry.package = pkgs.pinentry_mac;
+    defaultCacheTtl = 600;
+    maxCacheTtl = 7200;
+  };
 }
