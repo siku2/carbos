@@ -18,6 +18,9 @@ in
       lfs.enable = true;
       ignores = [
         ".DS_Store"
+        ".claude/"
+        ".direnv/"
+        "scratch/"
       ];
       settings = {
         user = {
