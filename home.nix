@@ -46,8 +46,8 @@ in
         init.defaultBranch = "main";
         rerere.enabled = true;
         alias = {
-          list-stale-branches = "!git branch -vv | awk '/: gone]/{print $1}'";
-          prune-stale-branches = "!f() { git fetch --prune && git list-stale-branches | while read branch; do git branch -D \"$branch\"; done; }; f";
+          list-dead-branches = "!git branch -vv | awk '/: gone]/{print $1}'";
+          prune-dead-branches = "!f() { git fetch --prune && git list-dead-branches | while read branch; do git branch -D \"$branch\"; done; }; f";
         };
       };
     };
