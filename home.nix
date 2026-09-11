@@ -8,8 +8,16 @@ let
   };
 in
 {
-  home.username = "simon";
-  home.stateVersion = "26.05";
+  home = {
+    username = "simon";
+    stateVersion = "26.05";
+
+    sessionVariables = {
+      # TODO: these can be removed once we switch zed-editor.enable to true.
+      EDITOR = "zed --wait";
+      VISUAL = "zed --wait";
+    };
+  };
 
   programs = {
     gh.enable = true;
@@ -77,6 +85,12 @@ in
       shellAliases = {
         x = "cargo run --quiet --bin xtask --";
       };
+    };
+
+    zed-editor = {
+      # TODO: switch from homebrew cask to this one.
+      enable = false;
+      defaultEditor = true;
     };
 
     codex = {
