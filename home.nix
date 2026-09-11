@@ -12,6 +12,7 @@ in
   home.stateVersion = "26.05";
 
   programs = {
+    gh.enable = true;
     git = {
       enable = true;
       lfs.enable = true;
@@ -111,6 +112,7 @@ in
     age
     cargo-clean-all
     fd
+    forgejo-cli
     fzf
     jq
     nil
