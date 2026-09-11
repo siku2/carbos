@@ -47,7 +47,7 @@ in
         rerere.enabled = true;
         alias = {
           list-stale-branches = "!git branch -vv | awk '/: gone]/{print $1}'";
-          prune-stale-branches = "!f() { git fetch --prune && git list-stale-branches | while read branch; do git branch -d \"$branch\"; done; }; f";
+          prune-stale-branches = "!f() { git fetch --prune && git list-stale-branches | while read branch; do git branch -D \"$branch\"; done; }; f";
         };
       };
     };
