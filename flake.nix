@@ -30,6 +30,7 @@
 
       overlay = final: prev: {
         codex = unstablePkgs.codex;
+        claude-code = unstablePkgs.claude-code;
 
         cargo-clean-all = prev.rustPlatform.buildRustPackage {
           pname = "cargo-clean-all";
