@@ -6,6 +6,13 @@
 {
   boot.initrd.systemd.enable = lib.mkForce false;
 
+  boot.kernelParams = lib.mkForce [
+    "console=ttyS0,115200"
+    "console=tty0"
+    "panic=30"
+    "boot.panic_on_fail"
+  ];
+
   hardware.enableRedistributableFirmware = lib.mkForce true;
 
   networking.hostName = "carbos-installer";
