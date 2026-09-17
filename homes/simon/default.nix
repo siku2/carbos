@@ -1,17 +1,27 @@
 {
+  config,
   lib,
   osConfig,
   pkgs,
   ...
 }:
 let
+  # home-manager wraps zed-editor to add extraPackages to PATH, but does not expose
+  # the wrapped derivation. Resolve "zeditor" from PATH to get that wrapper.
   zedPager = pkgs.writeShellScriptBin "zed-pager" ''
-    ${lib.getExe pkgs.ansifilter} --text | ${lib.getExe pkgs.unstable.zed-editor} -e -
+    ${lib.getExe pkgs.ansifilter} --text | zeditor -e -
+  '';
+
+  # nixpkgs names the binary "zeditor", but Zed's own docs and our settings use "zed".
+  zedCli = pkgs.writeShellScriptBin "zed" ''
+    exec zeditor "$@"
   '';
 in
 {
   imports = [
     ./ai.nix
+    ./bitwarden.nix
+    ./firefox.nix
     ./git.nix
     ./niri.nix
   ];
@@ -24,18 +34,25 @@ in
     packages = with pkgs; [
       ansifilter
       bitwarden-cli
+      bitwarden-desktop
       devcontainer
       element-desktop
-      firefox
       gh
       git-credential-manager
       inkscape
       kicad
+      libsecret
       nextcloud-talk-desktop
+      seahorse
       unstable.secretspec
       wl-clipboard
+      zedCli
       zedPager
     ];
+
+    # Bitwarden's desktop app serves the SSH agent so the private key never
+    # touches disk. It must be running and unlocked for signing to work.
+    sessionVariables.SSH_AUTH_SOCK = "${config.home.homeDirectory}/.bitwarden-ssh-agent.sock";
   };
 
   programs = {
@@ -57,6 +74,7 @@ in
 
     atuin = {
       enable = true;
+      package = pkgs.unstable.atuin;
       settings = {
         update_check = false;
         enter_accept = true;
