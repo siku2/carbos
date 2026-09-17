@@ -1,7 +1,16 @@
 {
   osConfig,
+  pkgs,
   ...
 }:
+let
+  # Held by Bitwarden's SSH agent, never on disk.
+  signingKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJc/x0F5XV2bnqHZFHZUlPmY/D24+mxhAWOR8D5LjyVi";
+
+  allowedSigners = pkgs.writeText "git-allowed-signers" ''
+    ${osConfig.carbos.user.email} namespaces="git" ${signingKey}
+  '';
+in
 {
   programs.git = {
     enable = true;
@@ -15,14 +24,13 @@
       user = {
         name = osConfig.carbos.user.fullName;
         email = osConfig.carbos.user.email;
-        # Held by Bitwarden's SSH agent, never on disk. Pinned as a literal so
-        # signing does not depend on the agent's key ordering.
-        signingkey = "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJc/x0F5XV2bnqHZFHZUlPmY/D24+mxhAWOR8D5LjyVi";
+        signingkey = "key::${signingKey}";
       };
       init.defaultBranch = "main";
       commit.gpgsign = true;
       tag.gpgsign = true;
       gpg.format = "ssh";
+      gpg.ssh.allowedSignersFile = "${allowedSigners}";
       credential = {
         helper = "manager";
         credentialstore = "secretservice";
