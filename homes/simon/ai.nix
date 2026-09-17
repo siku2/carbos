@@ -46,17 +46,6 @@ in
     settings = {
       formatter = true;
       lsp = true;
-      permission = {
-        external_directory = {
-          "/tmp/**" = "allow";
-          "~/.cargo/git/checkouts/**" = "allow";
-          "~/.cargo/registry/src/**" = "allow";
-        };
-        edit = {
-          "~/.cargo/git/checkouts/**" = "deny";
-          "~/.cargo/registry/src/**" = "deny";
-        };
-      };
       mcp = {
         web-reader = {
           type = "remote";
