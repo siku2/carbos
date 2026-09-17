@@ -13,6 +13,11 @@
     "boot.panic_on_fail"
   ];
 
+  # kexec hands the kernel no EFI framebuffer, so the display stays black
+  # until i915 binds. Load it in the initrd to get a console as early as
+  # possible.
+  boot.initrd.kernelModules = [ "i915" ];
+
   hardware.enableRedistributableFirmware = lib.mkForce true;
 
   networking.hostName = "carbos-installer";
