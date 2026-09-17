@@ -1,5 +1,12 @@
-_:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 let
+  runInSlice = "${pkgs.systemd}/bin/systemd-run --user --scope --quiet --slice=firefox.slice ${lib.getExe config.programs.firefox.finalPackage}";
+
   bitwardenId = "{446900e4-71c2-419f-a6a7-df9c091e268b}";
 
   fromAmo = slug: {
@@ -38,6 +45,24 @@ in
       DisableAppUpdate = true;
       ExtensionUpdate = true;
 
+      # Firefox's footprint is mostly content processes, and it never sheds
+      # tabs on its own because unloadOnLowMemory is off by default.
+      # Status "default" so these stay tunable in about:config.
+      Preferences = {
+        "dom.ipc.processCount" = {
+          Value = 4;
+          Status = "default";
+        };
+        "browser.tabs.unloadOnLowMemory" = {
+          Value = true;
+          Status = "default";
+        };
+        "browser.sessionhistory.max_total_viewers" = {
+          Value = 2;
+          Status = "default";
+        };
+      };
+
       DisableFirefoxStudies = true;
       DisablePocket = true;
       DisableTelemetry = true;
@@ -53,4 +78,51 @@ in
       };
     };
   };
+
+  systemd.user.slices.firefox = {
+    Unit.Description = "Firefox";
+    Slice.MemoryHigh = "8G";
+  };
+
+  # xdg.enable is off, so xdg.desktopEntries would be silently dropped.
+  # Shadow the package's entry by hand instead.
+  home.file.".local/share/applications/firefox.desktop".source =
+    let
+      item = pkgs.makeDesktopItem {
+        name = "firefox";
+        desktopName = "Firefox";
+        genericName = "Web Browser";
+        icon = "firefox";
+        exec = "${runInSlice} --name firefox %U";
+        categories = [
+          "Network"
+          "WebBrowser"
+        ];
+        mimeTypes = [
+          "text/html"
+          "text/xml"
+          "application/xhtml+xml"
+          "application/vnd.mozilla.xul+xml"
+          "x-scheme-handler/http"
+          "x-scheme-handler/https"
+        ];
+        startupNotify = true;
+        startupWMClass = "firefox";
+        actions = {
+          new-private-window = {
+            name = "New Private Window";
+            exec = "${runInSlice} --private-window %U";
+          };
+          new-window = {
+            name = "New Window";
+            exec = "${runInSlice} --new-window %U";
+          };
+          profile-manager-window = {
+            name = "Profile Manager";
+            exec = "${runInSlice} --ProfileManager";
+          };
+        };
+      };
+    in
+    "${item}/share/applications/firefox.desktop";
 }
