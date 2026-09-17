@@ -15,7 +15,9 @@
       user = {
         name = osConfig.carbos.user.fullName;
         email = osConfig.carbos.user.email;
-        signingkey = "~/.ssh/id_ed25519.pub";
+        # Held by Bitwarden's SSH agent, never on disk. Pinned as a literal so
+        # signing does not depend on the agent's key ordering.
+        signingkey = "key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJc/x0F5XV2bnqHZFHZUlPmY/D24+mxhAWOR8D5LjyVi";
       };
       init.defaultBranch = "main";
       commit.gpgsign = true;
