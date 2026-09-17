@@ -1,4 +1,5 @@
 {
+  config,
   lib,
   pkgs,
   ...
@@ -93,6 +94,25 @@
         fi
       '')
     ];
+
+  systemd.services.carbos-verify = {
+    description = "Verify integrity of the bundled Nix store";
+    after = [ "register-nix-paths.service" ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      StandardOutput = "journal+console";
+      StandardError = "journal+console";
+    };
+    script = ''
+      echo "carbos-verify: hashing every store path, this takes a minute"
+      if ${lib.getExe' config.nix.package "nix-store"} --verify --check-contents; then
+        echo "carbos-verify: PASS - store is intact"
+      else
+        echo "carbos-verify: FAIL - store is corrupt in memory"
+      fi
+    '';
+  };
 
   users.motd = ''
 
