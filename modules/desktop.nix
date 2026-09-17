@@ -14,7 +14,13 @@
     configHome = "/home/${config.carbos.user.login}";
   };
 
-  environment.systemPackages = [ pkgs.xwayland-satellite ];
+  environment.systemPackages = [
+    pkgs.xwayland-satellite
+    # DMS uses this for its printer management UI.
+    pkgs.cups-pk-helper
+  ];
+
+  services.printing.enable = true;
 
   environment.sessionVariables.NIXOS_OZONE_WL = "1";
 }
