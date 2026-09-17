@@ -28,7 +28,6 @@ in
       enabledPlugins = {
         "rust-analyzer-lsp@claude-plugins-official" = true;
       };
-      effortLevel = "high";
       skipDangerousModePermissionPrompt = true;
       theme = "dark";
       switchModelsOnFlag = false;
