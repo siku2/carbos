@@ -9,9 +9,6 @@ _: {
       };
       efi.canTouchEfiVariables = true;
     };
-
-    # TPM2 unlock of the LUKS root needs the systemd initrd.
-    initrd.systemd.enable = true;
   };
 
   hardware = {
