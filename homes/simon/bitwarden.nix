@@ -51,8 +51,12 @@ let
 
     tmp=$(mktemp ${dataFile}.XXXXXX)
     trap 'rm -f "$tmp"' EXIT
-    ${lib.getExe pkgs.jq} --argjson managed ${lib.escapeShellArg (builtins.toJSON managed)} \
-      '. * $managed' ${dataFile} > "$tmp"
+    ${lib.getExe pkgs.jq} --argjson managed ${lib.escapeShellArg (builtins.toJSON managed)} '
+      . * $managed
+      | if .global_account_activeAccountId then
+          .["user_" + .global_account_activeAccountId + "_desktopSettings_sshAgentRememberAuthorizations"] = "never"
+        else . end
+    ' ${dataFile} > "$tmp"
     mv "$tmp" ${dataFile}
     trap - EXIT
   '';
