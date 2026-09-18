@@ -112,6 +112,8 @@
             "zed@preview"
           ];
         };
+
+        documentation.enable = false;
       };
     in
     {
