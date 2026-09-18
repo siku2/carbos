@@ -12,6 +12,10 @@
       url = "github:nix-community/home-manager/release-26.05";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -21,11 +25,23 @@
       nixpkgs-unstable,
       nix-darwin,
       home-manager,
+      rust-overlay,
     }:
     let
+      system = "aarch64-darwin";
+
       unstablePkgs = import nixpkgs-unstable {
-        system = "aarch64-darwin";
+        inherit system;
         config.allowUnfree = true;
+      };
+
+      pkgs = import nixpkgs {
+        inherit system;
+        config.allowUnfree = true;
+        overlays = [
+          overlay
+          rust-overlay.overlays.default
+        ];
       };
 
       overlay = final: prev: {
@@ -70,7 +86,7 @@
         };
 
         nixpkgs = {
-          hostPlatform = "aarch64-darwin";
+          hostPlatform = system;
           config.allowUnfree = true;
           overlays = [ overlay ];
         };
@@ -117,6 +133,11 @@
       };
     in
     {
+      devShells.${system} = import ./devshells.nix {
+        inherit pkgs;
+        inherit (nixpkgs) lib;
+      };
+
       darwinConfigurations."itma-23001" = nix-darwin.lib.darwinSystem {
         modules = [
           configuration
