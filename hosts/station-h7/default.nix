@@ -14,9 +14,7 @@
 
   networking.hostName = "station-h7";
 
-  home-manager.users.${config.carbos.user.login}.imports = [
-    ../../homes/simon/easyeffects.nix
-  ];
+  home-manager.users.${config.carbos.user.login}.imports = [ ./home.nix ];
 
   # Steam, Proton and the HashiCorp tools are all unfree.
   nixpkgs.config.allowUnfree = true;
