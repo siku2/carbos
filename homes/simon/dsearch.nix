@@ -17,7 +17,8 @@ let
         exclude_hidden = true;
         extract_exif = true;
         merge_default_exclude_dirs = true;
-        exclude_dirs = [ ];
+        # A WebDAV mount. Indexing it would crawl the server over the network.
+        exclude_dirs = [ "Nextcloud" ];
       }
       {
         path = "${config.home.homeDirectory}/Projects";
