@@ -34,10 +34,14 @@ in
     package = claudeCodeAllowingBypass;
     context = ./files/CLAUDE.md;
     settings = {
+      attribution = {
+        commit = "";
+        pr = "";
+        sessionUrl = false;
+      };
       env = {
         CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY = "1";
       };
-      includeCoAuthoredBy = false;
       permissions.defaultMode = "auto";
       enabledPlugins = {
         "rust-analyzer-lsp@claude-plugins-official" = true;
