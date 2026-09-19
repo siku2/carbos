@@ -9,18 +9,27 @@ let
   server = "https://cloud.bg12.ch";
   user = osConfig.carbos.user.login;
 
+  secretspecManifest = ../../secretspec.toml;
+  secretspec = lib.getExe pkgs.unstable.secretspec;
+
   # A Nextcloud app password, not the login password. Settings > Security.
   password = [
-    (lib.getExe config.programs.rbw.package)
+    secretspec
+    "--file"
+    "${secretspecManifest}"
     "get"
-    "nextcloud"
+    "NEXTCLOUD_PASSWORD"
+    "--caller"
+    "vdirsyncer"
+    "--reason"
+    "vdirsyncer needs the Nextcloud app password to sync the calendar"
   ];
 
   mountPoint = "${config.home.homeDirectory}/Nextcloud";
 
   mount = pkgs.writeShellScript "nextcloud-mount" ''
     set -eu
-    RCLONE_CONFIG_NC_PASS=$(${lib.escapeShellArgs password} | ${lib.getExe pkgs.rclone} obscure -)
+    RCLONE_CONFIG_NC_PASS=$(printf '%s' "$NEXTCLOUD_PASSWORD" | ${lib.getExe pkgs.rclone} obscure -)
     export RCLONE_CONFIG_NC_PASS
     exec ${lib.getExe pkgs.rclone} mount nc: ${mountPoint} \
       --vfs-cache-mode writes \
@@ -67,6 +76,7 @@ in
       firstweekday = 0;
     };
   };
+
   programs.vdirsyncer.enable = true;
 
   services.vdirsyncer = {
@@ -81,15 +91,21 @@ in
     Unit = {
       Description = "Nextcloud files";
       PartOf = [ "graphical-session.target" ];
-      After = [
-        "graphical-session.target"
-        "rbw-agent.service"
-      ];
+      After = [ "graphical-session.target" ];
     };
     Service = {
       Type = "notify";
+      # secretspec forks, so rclone is not the main pid and would otherwise
+      # have its readiness notification rejected.
+      NotifyAccess = "all";
       ExecStartPre = "${pkgs.coreutils}/bin/mkdir -p ${mountPoint}";
-      ExecStart = mount;
+      ExecStart = ''
+        ${secretspec} --file ${secretspecManifest} run \
+          --scope nextcloud \
+          --caller nextcloud-mount \
+          --reason "rclone needs the Nextcloud app password to mount the drive" \
+          -- ${mount}
+      '';
       ExecStop = "${pkgs.fuse3}/bin/fusermount3 -u ${mountPoint}";
       Restart = "on-failure";
       RestartSec = 10;
