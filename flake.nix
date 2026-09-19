@@ -6,6 +6,15 @@
 
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
 
+    # CachyOS kernels and the AMD HDR module.
+    chaotic = {
+      url = "github:chaotic-cx/nyx/nyxpkgs-unstable";
+      inputs = {
+        home-manager.follows = "home-manager";
+        nixpkgs.follows = "nixpkgs-unstable";
+      };
+    };
+
     home-manager = {
       url = "github:nix-community/home-manager/release-26.05";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -47,6 +56,19 @@
           };
           modules = [
             ./hosts/carbon-x1
+            inputs.disko.nixosModules.disko
+            inputs.home-manager.nixosModules.home-manager
+          ];
+        };
+
+        station-h7 = nixpkgs.lib.nixosSystem {
+          inherit system;
+          specialArgs = {
+            inherit inputs;
+          };
+          modules = [
+            ./hosts/station-h7
+            inputs.chaotic.nixosModules.default
             inputs.disko.nixosModules.disko
             inputs.home-manager.nixosModules.home-manager
           ];
