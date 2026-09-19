@@ -1,4 +1,5 @@
-_: {
+{ config, ... }:
+{
   system.nixos = {
     distroId = "carbos";
     distroName = "CarbOS";
@@ -38,6 +39,11 @@ _: {
   networking.networkmanager.enable = true;
 
   services.resolved.enable = true;
+
+  # nixos-rebuild resolves this symlink and uses its parent as the flake root.
+  systemd.tmpfiles.rules = [
+    "L+ /etc/nixos/flake.nix - - - - /home/${config.carbos.user.login}/Projects/carbos/flake.nix"
+  ];
 
   services.pipewire = {
     enable = true;
