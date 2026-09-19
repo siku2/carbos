@@ -11,6 +11,12 @@
     settings = {
       email = osConfig.carbos.user.email;
       base_url = "https://vault.bg12.ch";
+
+      # Setting sso_id is what makes rbw use the authorization_code flow at all.
+      # Vaultwarden has a single IdP and its /sso/prevalidate ignores the value.
+      sso_id = "vaultwarden";
+      # Without this rbw opens the SSO page on vault.bitwarden.com.
+      ui_url = "https://vault.bg12.ch";
       # gcr is not on the session bus, so pinentry-gnome3 would drop to curses.
       pinentry = pkgs.pinentry-qt;
       lock_timeout = 28800;
