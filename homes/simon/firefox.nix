@@ -84,6 +84,8 @@ in
         ];
       };
 
+      DisplayBookmarksToolbar = "never";
+
       DisableAppUpdate = true;
       ExtensionUpdate = true;
 
