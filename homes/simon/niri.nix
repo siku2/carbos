@@ -185,7 +185,6 @@
     for f in ${./files/niri-dms}/*.kdl; do
         name=$(basename "$f")
         if [ ! -e "$dms_dir/$name" ]; then
-            # DMS rewrites these itself, so they must not keep the store's mode.
             install -m 644 "$f" "$dms_dir/$name"
         fi
     done

@@ -18,8 +18,7 @@
     pkgs.xwayland-satellite
     # DMS uses this for its printer management UI.
     pkgs.cups-pk-helper
-    # Qt's default theme name. Without it installed, icon lookup fails
-    # outright rather than falling back to hicolor.
+    # Qt's default theme name. Without it, icon lookup fails outright.
     pkgs.adwaita-icon-theme
   ];
 
