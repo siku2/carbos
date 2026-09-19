@@ -1,5 +1,4 @@
 {
-  config,
   lib,
   osConfig,
   pkgs,
@@ -22,6 +21,7 @@ in
     ./bitwarden.nix
     ./firefox.nix
     ./git.nix
+    ./rbw.nix
     ./niri.nix
   ];
 
@@ -48,9 +48,6 @@ in
       zedCli
       zedPager
     ];
-
-    # Served by the Bitwarden desktop app, so the key never touches disk.
-    sessionVariables.SSH_AUTH_SOCK = "${config.home.homeDirectory}/.bitwarden-ssh-agent.sock";
   };
 
   programs = {
