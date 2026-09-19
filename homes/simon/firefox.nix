@@ -5,9 +5,8 @@
   ...
 }:
 let
-  # DMS already launches every app in a transient scope named after its pid, so
-  # the inner scope needs an explicit unit name or it collides and the launch
-  # fails.
+  # DMS already launches apps in a transient scope named after their pid, so an
+  # explicit unit name is needed here or the two collide and the launch fails.
   firefoxInSlice = pkgs.writeShellScriptBin "firefox" ''
     exec ${pkgs.systemd}/bin/systemd-run --user --scope --quiet --collect \
       --unit="firefox-$$" --slice=firefox.slice \
@@ -22,10 +21,34 @@ let
     install_url = "https://addons.mozilla.org/firefox/downloads/latest/${slug}/latest.xpi";
     installation_mode = "normal_installed";
   };
+
+  # Collapses while a window holds one tab and returns as soon as there is a
+  # second, so a stray tab can never end up unreachable.
+  tabBarCss = pkgs.writeText "tab-bar.css" ''
+    @-moz-document url("chrome://browser/content/browser.xhtml") {
+      #TabsToolbar:has(#tabbrowser-arrowscrollbox > tab:only-of-type) {
+        visibility: collapse !important;
+      }
+    }
+  '';
 in
 {
   programs.firefox = {
     enable = true;
+
+    # Registering the sheet from autoconfig keeps it out of the profile, which
+    # is the only writable place userChrome.css can live.
+    package = pkgs.firefox.override {
+      extraPrefs = ''
+        try {
+          var sss = Components.classes["@mozilla.org/content/style-sheet-service;1"]
+            .getService(Components.interfaces.nsIStyleSheetService);
+          sss.loadAndRegisterSheet(Services.io.newURI("file://${tabBarCss}"), sss.USER_SHEET);
+        } catch (e) {
+          Components.utils.reportError(e);
+        }
+      '';
+    };
 
     policies = {
       ExtensionSettings = {
@@ -41,8 +64,6 @@ in
         "uBlock0@raymondhill.net" = fromAmo "ublock-origin";
       };
 
-      # Read from chrome.storage.managed on first install, so a fresh profile
-      # skips the self-host URL step.
       "3rdparty".Extensions.${bitwardenId}.environment = {
         base = "https://vault.bg12.ch";
       };
@@ -51,6 +72,12 @@ in
       ExtensionUpdate = true;
 
       Preferences = {
+        # Links that would have opened a tab open a window instead. Popups with
+        # window features are unaffected by open_newwindow.restriction = 2.
+        "browser.link.open_newwindow" = {
+          Value = 2;
+          Status = "default";
+        };
         "dom.ipc.processCount" = {
           Value = 4;
           Status = "default";
