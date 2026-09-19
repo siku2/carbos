@@ -13,10 +13,7 @@ let
   managed = {
     global_desktopSettings_sshAgentEnabled = true;
 
-    # --autostart below only hides the window when this is on.
-    global_desktopSettings_runInBackground = true;
-
-    # Otherwise the app writes its own autostart entry with a stale store path.
+    global_desktopSettings_runInBackground = false;
     global_desktopSettings_openAtLogin = false;
 
     global_theming_selection = "dark";
@@ -66,16 +63,4 @@ in
     run ${apply}
   '';
 
-  systemd.user.services.bitwarden = {
-    Unit = {
-      Description = "Bitwarden desktop";
-      PartOf = [ "graphical-session.target" ];
-      After = [ "graphical-session.target" ];
-    };
-    Service = {
-      ExecStart = "${lib.getExe pkgs.bitwarden-desktop} --autostart";
-      Restart = "on-failure";
-    };
-    Install.WantedBy = [ "graphical-session.target" ];
-  };
 }
