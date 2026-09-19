@@ -25,6 +25,7 @@ in
     ./git.nix
     ./gtk.nix
     ./rbw.nix
+    ./nextcloud.nix
     ./niri.nix
   ];
 
