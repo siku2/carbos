@@ -29,6 +29,10 @@ let
 
   mount = pkgs.writeShellScript "nextcloud-mount" ''
     set -eu
+    export RCLONE_CONFIG_NC_TYPE=webdav
+    export RCLONE_CONFIG_NC_VENDOR=nextcloud
+    export RCLONE_CONFIG_NC_URL=${server}/remote.php/dav/files/${user}/
+    export RCLONE_CONFIG_NC_USER=${user}
     RCLONE_CONFIG_NC_PASS=$(printf '%s' "$NEXTCLOUD_PASSWORD" | ${lib.getExe pkgs.rclone} obscure -)
     export RCLONE_CONFIG_NC_PASS
     exec ${lib.getExe pkgs.rclone} mount nc: ${mountPoint} \
@@ -42,6 +46,9 @@ in
 
   accounts.calendar.accounts.nextcloud = {
     primary = true;
+    # With discover, khal names calendars after the collections, so the
+    # account name is not a valid default_calendar.
+    primaryCollection = "personal";
 
     remote = {
       type = "caldav";
@@ -83,6 +90,12 @@ in
     enable = true;
     frequency = "*:0/15";
   };
+
+  # The upstream unit only runs metasync and sync, both of which refuse to run
+  # until collections have been discovered. Repeating it picks up new calendars.
+  systemd.user.services.vdirsyncer.Service.ExecStartPre = [
+    "${lib.getExe pkgs.bash} -c 'yes | ${lib.getExe config.services.vdirsyncer.package} discover'"
+  ];
 
   home.packages = [ pkgs.rclone ];
 
