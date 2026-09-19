@@ -37,6 +37,8 @@ _: {
 
   networking.networkmanager.enable = true;
 
+  services.resolved.enable = true;
+
   services.pipewire = {
     enable = true;
     alsa.enable = true;
