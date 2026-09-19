@@ -47,6 +47,22 @@ in
         } catch (e) {
           Components.utils.reportError(e);
         }
+
+        // There is no pref for key bindings. Catching the event in the capture
+        // phase beats the <key> element to it.
+        try {
+          Services.obs.addObserver(function (win) {
+            win.addEventListener("keydown", function (e) {
+              if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && e.key === "t") {
+                e.preventDefault();
+                e.stopPropagation();
+                win.OpenBrowserWindow();
+              }
+            }, true);
+          }, "browser-delayed-startup-finished");
+        } catch (e) {
+          Components.utils.reportError(e);
+        }
       '';
     };
 
