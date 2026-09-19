@@ -5,6 +5,9 @@
   pkgs,
   ...
 }:
+let
+  sshAuthSock = "\${XDG_RUNTIME_DIR}/rbw/ssh-agent-socket";
+in
 {
   programs.rbw = {
     enable = true;
@@ -38,5 +41,8 @@
     Install.WantedBy = [ "graphical-session.target" ];
   };
 
-  home.sessionVariables.SSH_AUTH_SOCK = "\${XDG_RUNTIME_DIR}/rbw/ssh-agent-socket";
+  # home.sessionVariables only reaches login shells. Apps launched from the
+  # shell inherit from the systemd user manager, which reads environment.d.
+  home.sessionVariables.SSH_AUTH_SOCK = sshAuthSock;
+  systemd.user.sessionVariables.SSH_AUTH_SOCK = sshAuthSock;
 }
