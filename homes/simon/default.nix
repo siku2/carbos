@@ -133,10 +133,13 @@ in
       ];
       extensions = [
         "cargo-tom"
+        "dockerfile"
         "git-firefly"
         "html"
         "nix"
+        "sql"
         "toml"
+        "xml"
       ];
       userSettings = {
         auto_update = false;
