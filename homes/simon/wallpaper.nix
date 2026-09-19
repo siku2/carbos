@@ -34,29 +34,18 @@ let
     wallpaperCyclingInterval = 1800;
   };
 
-  # DMS owns session.json and watches it, so merging in place is enough.
-  # wallpaperPath is only seeded, since cycling rewrites it as it goes.
-  apply = pkgs.writeShellScript "dms-wallpaper" ''
-    set -eu
-    mkdir -p "$(dirname ${sessionFile})"
-    [ -f ${sessionFile} ] || echo '{}' > ${sessionFile}
-
-    tmp=$(mktemp ${sessionFile}.XXXXXX)
-    trap 'rm -f "$tmp"' EXIT
-    ${lib.getExe pkgs.jq} \
-      --argjson managed ${lib.escapeShellArg (builtins.toJSON managed)} \
-      '. as $orig
-       | . * $managed
-       | if ($orig.wallpaperPath // "") != "" then .wallpaperPath = $orig.wallpaperPath else . end' \
-      ${sessionFile} > "$tmp"
-    mv "$tmp" ${sessionFile}
-    trap - EXIT
-  '';
+  apply = pkgs.writeShellApplication {
+    name = "dms-wallpaper";
+    runtimeInputs = [ pkgs.jq ];
+    text = builtins.readFile ./dms-wallpaper.sh;
+  };
 in
 {
   home.file.".local/share/wallpapers".source = wallpapers;
 
   home.activation.dmsWallpaper = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    run ${apply}
+    SESSION_FILE=${lib.escapeShellArg sessionFile} \
+    MANAGED=${lib.escapeShellArg (builtins.toJSON managed)} \
+    run ${lib.getExe apply}
   '';
 }
