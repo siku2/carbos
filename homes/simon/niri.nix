@@ -104,9 +104,17 @@
         }
     }
 
+    workspace "chat"
+
     window-rule {
         match app-id=r#"^org\.wezfurlong\.wezterm$"#
         default-column-width {}
+    }
+
+    window-rule {
+        match app-id=r#"^org\.gnome\.Fractal$"#
+        open-on-workspace "chat"
+        open-focused false
     }
 
     window-rule {

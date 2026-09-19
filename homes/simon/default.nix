@@ -21,6 +21,7 @@ in
     ./bitwarden.nix
     ./dsearch.nix
     ./firefox.nix
+    ./fractal.nix
     ./git.nix
     ./gtk.nix
     ./rbw.nix
@@ -37,7 +38,6 @@ in
       bitwarden-cli
       bitwarden-desktop
       devcontainer
-      element-desktop
       gh
       git-credential-manager
       inkscape
