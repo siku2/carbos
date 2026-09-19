@@ -141,6 +141,7 @@ in
         edit_predictions.provider = "copilot";
         git_panel.tree_view = true;
         session.trust_all_worktrees = true;
+        disable_ai = true;
         terminal.env = {
           EDITOR = "zed -ew";
           VISUAL = "zed -ew";
