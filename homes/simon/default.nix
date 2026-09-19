@@ -19,6 +19,7 @@ in
   imports = [
     ./ai.nix
     ./bitwarden.nix
+    ./dsearch.nix
     ./firefox.nix
     ./git.nix
     ./gtk.nix
