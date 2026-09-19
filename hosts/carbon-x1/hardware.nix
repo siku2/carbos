@@ -17,8 +17,7 @@ _: {
     graphics.enable = true;
   };
 
-  # Synaptics 06cb:00bd. Enabling this also turns on PAM fprintAuth, which is
-  # what Bitwarden's biometric unlock goes through on Linux (via polkit).
+  # Synaptics 06cb:00bd. Also turns on PAM fprintAuth.
   services.fprintd.enable = true;
 
   services.thermald.enable = true;

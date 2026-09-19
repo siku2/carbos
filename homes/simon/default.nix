@@ -6,13 +6,12 @@
   ...
 }:
 let
-  # home-manager wraps zed-editor to add extraPackages to PATH, but does not expose
-  # the wrapped derivation. Resolve "zeditor" from PATH to get that wrapper.
+  # home-manager builds the extraPackages wrapper inline and never exposes it,
+  # so both of these resolve "zeditor" from PATH rather than from pkgs.
   zedPager = pkgs.writeShellScriptBin "zed-pager" ''
     ${lib.getExe pkgs.ansifilter} --text | zeditor -e -
   '';
 
-  # nixpkgs names the binary "zeditor", but Zed's own docs and our settings use "zed".
   zedCli = pkgs.writeShellScriptBin "zed" ''
     exec zeditor "$@"
   '';
@@ -50,8 +49,7 @@ in
       zedPager
     ];
 
-    # Bitwarden's desktop app serves the SSH agent so the private key never
-    # touches disk. It must be running and unlocked for signing to work.
+    # Served by the Bitwarden desktop app, so the key never touches disk.
     sessionVariables.SSH_AUTH_SOCK = "${config.home.homeDirectory}/.bitwarden-ssh-agent.sock";
   };
 
