@@ -24,5 +24,9 @@
 
   services.printing.enable = true;
 
+  # Nautilus needs gvfs for trash and network mounts, udisks2 to mount media.
+  services.gvfs.enable = true;
+  services.udisks2.enable = true;
+
   environment.sessionVariables.NIXOS_OZONE_WL = "1";
 }

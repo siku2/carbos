@@ -21,6 +21,7 @@ in
     ./bitwarden.nix
     ./firefox.nix
     ./git.nix
+    ./gtk.nix
     ./rbw.nix
     ./niri.nix
   ];
@@ -41,6 +42,7 @@ in
       inkscape
       kicad
       libsecret
+      nautilus
       nextcloud-talk-desktop
       seahorse
       unstable.secretspec
