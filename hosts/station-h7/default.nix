@@ -2,11 +2,15 @@
 {
   imports = [
     ./disk.nix
+    ./gaming.nix
     ./hardware.nix
     ../../modules
   ];
 
   networking.hostName = "station-h7";
+
+  # Steam, Proton and the HashiCorp tools are all unfree.
+  nixpkgs.config.allowUnfree = true;
 
   system.stateVersion = "26.05";
 
