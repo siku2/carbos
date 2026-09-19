@@ -5,7 +5,16 @@
   ...
 }:
 let
-  runInSlice = "${pkgs.systemd}/bin/systemd-run --user --scope --quiet --slice=firefox.slice ${lib.getExe config.programs.firefox.finalPackage}";
+  # DMS already launches every app in a transient scope named after its pid, so
+  # the inner scope needs an explicit unit name or it collides and the launch
+  # fails.
+  firefoxInSlice = pkgs.writeShellScriptBin "firefox" ''
+    exec ${pkgs.systemd}/bin/systemd-run --user --scope --quiet --collect \
+      --unit="firefox-$$" --slice=firefox.slice \
+      ${lib.getExe config.programs.firefox.finalPackage} "$@"
+  '';
+
+  firefox = lib.getExe firefoxInSlice;
 
   bitwardenId = "{446900e4-71c2-419f-a6a7-df9c091e268b}";
 
@@ -32,22 +41,15 @@ in
         "uBlock0@raymondhill.net" = fromAmo "ublock-origin";
       };
 
-      # The Bitwarden extension reads chrome.storage.managed on first install
-      # and points itself at our server, so a fresh profile skips the
-      # "self-host URL" step. It cannot pre-fill credentials, so the first
-      # login is still done by hand.
+      # Read from chrome.storage.managed on first install, so a fresh profile
+      # skips the self-host URL step.
       "3rdparty".Extensions.${bitwardenId}.environment = {
         base = "https://vault.bg12.ch";
       };
 
-      # nix owns the package, so Firefox must never update itself. Extension
-      # updates stay on, which is the whole point of installing from AMO.
       DisableAppUpdate = true;
       ExtensionUpdate = true;
 
-      # Firefox's footprint is mostly content processes, and it never sheds
-      # tabs on its own because unloadOnLowMemory is off by default.
-      # Status "default" so these stay tunable in about:config.
       Preferences = {
         "dom.ipc.processCount" = {
           Value = 4;
@@ -84,8 +86,7 @@ in
     Slice.MemoryHigh = "8G";
   };
 
-  # xdg.enable is off, so xdg.desktopEntries would be silently dropped.
-  # Shadow the package's entry by hand instead.
+  # xdg.enable is off, so xdg.desktopEntries would be dropped silently.
   home.file.".local/share/applications/firefox.desktop".source =
     let
       item = pkgs.makeDesktopItem {
@@ -93,7 +94,7 @@ in
         desktopName = "Firefox";
         genericName = "Web Browser";
         icon = "firefox";
-        exec = "${runInSlice} --name firefox %U";
+        exec = "${firefox} --name firefox %U";
         categories = [
           "Network"
           "WebBrowser"
@@ -111,15 +112,15 @@ in
         actions = {
           new-private-window = {
             name = "New Private Window";
-            exec = "${runInSlice} --private-window %U";
+            exec = "${firefox} --private-window %U";
           };
           new-window = {
             name = "New Window";
-            exec = "${runInSlice} --new-window %U";
+            exec = "${firefox} --new-window %U";
           };
           profile-manager-window = {
             name = "Profile Manager";
-            exec = "${runInSlice} --ProfileManager";
+            exec = "${firefox} --ProfileManager";
           };
         };
       };
