@@ -6,6 +6,20 @@
 let
   secretspecManifest = ../../secretspec.toml;
 
+  # No settings key exists for this. The flag only makes bypass mode
+  # selectable, defaultMode below still decides how a session starts.
+  claudeCodeAllowingBypass = pkgs.unstable.symlinkJoin {
+    name = "claude-code-allow-bypass";
+    paths = [ pkgs.unstable.claude-code ];
+    nativeBuildInputs = [ pkgs.unstable.makeBinaryWrapper ];
+    postBuild = ''
+      wrapProgram $out/bin/claude \
+        --inherit-argv0 \
+        --add-flags --allow-dangerously-skip-permissions
+    '';
+    inherit (pkgs.unstable.claude-code) meta;
+  };
+
   opencodeWithSecrets = pkgs.writeShellScriptBin "opencode" ''
     exec ${lib.getExe pkgs.unstable.secretspec} --file ${secretspecManifest} run \
       --scope opencode \
@@ -17,7 +31,7 @@ in
 {
   programs.claude-code = {
     enable = true;
-    package = pkgs.unstable.claude-code;
+    package = claudeCodeAllowingBypass;
     context = ./files/CLAUDE.md;
     settings = {
       env = {
