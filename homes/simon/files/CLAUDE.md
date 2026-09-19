@@ -24,7 +24,8 @@ complex. Break it into multiple sentences instead.
 
 Avoid writing long elaborate comments. Assume the reader is smarter than you
 and can understand the code without excessive explanation. A comment is
-warranted only if the code is not self-explanatory.
+warranted only if the code is not self-explanatory. This applies to
+configuration files as well.
 
 ### C2
 
@@ -103,4 +104,29 @@ Particularly important is the structure:
 
 [even more advanced explanations if necessary]
 ```
+
+### R7
+
+Never use the `async_trait` crate. Use native async fn in traits. When dyn
+dispatch is required, define a second "boxed" trait whose methods return
+`Box::pin`'d futures and give it a blanket impl for all implementors of the
+base trait. Only the boxed trait is used as a trait object.
+
+### R8
+
+In a Cargo workspace, `[workspace.dependencies]` is a pure version pin: every
+entry sets `default-features = false` and enables no features. Member crates
+explicitly enable exactly the features they need.
+
+### R9
+
+A dependency entry that does not fit on one line becomes an explicit subtable
+(`[dependencies.foo]`). Dependency tables contain only single-line entries.
+
+### R10
+
+Pin the toolchain with a committed `rust-toolchain.toml`. Use the
+[cellguard rustfmt.toml](https://github.com/stargrid-systems/cellguard/blob/main/rustfmt.toml)
+as the formatting style. It needs nightly rustfmt. Compilation stays on the
+pinned stable toolchain.
 
