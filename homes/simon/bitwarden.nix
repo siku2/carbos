@@ -11,10 +11,8 @@ let
   # Keys are "global_<stateDefinition>_<key>" and a Bitwarden update can rename
   # them, in which case they silently stop applying.
   managed = {
-    global_desktopSettings_sshAgentEnabled = true;
-
-    global_desktopSettings_runInBackground = false;
-    global_desktopSettings_openAtLogin = false;
+    # rbw-agent serves ssh now.
+    global_desktopSettings_sshAgentEnabled = false;
 
     global_theming_selection = "dark";
 
@@ -48,12 +46,8 @@ let
 
     tmp=$(mktemp ${dataFile}.XXXXXX)
     trap 'rm -f "$tmp"' EXIT
-    ${lib.getExe pkgs.jq} --argjson managed ${lib.escapeShellArg (builtins.toJSON managed)} '
-      . * $managed
-      | if .global_account_activeAccountId then
-          .["user_" + .global_account_activeAccountId + "_desktopSettings_sshAgentRememberAuthorizations"] = "never"
-        else . end
-    ' ${dataFile} > "$tmp"
+    ${lib.getExe pkgs.jq} --argjson managed ${lib.escapeShellArg (builtins.toJSON managed)} \
+      '. * $managed' ${dataFile} > "$tmp"
     mv "$tmp" ${dataFile}
     trap - EXIT
   '';
@@ -62,5 +56,4 @@ in
   home.activation.bitwardenSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     run ${apply}
   '';
-
 }
