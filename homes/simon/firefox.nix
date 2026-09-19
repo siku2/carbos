@@ -68,6 +68,22 @@ in
         base = "https://vault.bg12.ch";
       };
 
+      # Names as they ship for en-US in region CH.
+      SearchEngines = {
+        Default = "DuckDuckGo";
+        Remove = [
+          "Bing"
+          "Ecosia"
+          "Perplexity"
+          "Qwant"
+          "Reddit"
+          "Startpage"
+          "Wikipedia (en)"
+          "YouTube"
+          "eBay"
+        ];
+      };
+
       DisableAppUpdate = true;
       ExtensionUpdate = true;
 
