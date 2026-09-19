@@ -40,6 +40,7 @@ in
       bitwarden-cli
       bitwarden-desktop
       devcontainer
+      forgejo-cli
       gh
       git-credential-manager
       inkscape
