@@ -7,17 +7,17 @@
 let
   dataFile = "${config.home.homeDirectory}/.config/Bitwarden/data.json";
 
-  # The desktop app has no policy file and no CLI for its settings, so these
-  # keys are written straight into its state. The names come from the app
-  # bundle and are not a public interface, so a Bitwarden update can rename
-  # them. If that happens these values stop being applied and the app falls
-  # back to whatever its UI last stored.
-  #
-  # Key layout is "global_<stateDefinition>_<key>". The environment is one
-  # object, not a key per field, and the app writes every url field, so match
-  # that shape exactly.
+  # There is no policy file, so these go straight into the app's own state.
+  # Keys are "global_<stateDefinition>_<key>" and a Bitwarden update can rename
+  # them, in which case they silently stop applying.
   managed = {
     global_desktopSettings_sshAgentEnabled = true;
+
+    # --autostart below only hides the window when this is on.
+    global_desktopSettings_runInBackground = true;
+
+    # Otherwise the app writes its own autostart entry with a stale store path.
+    global_desktopSettings_openAtLogin = false;
 
     global_theming_selection = "dark";
 
@@ -40,7 +40,7 @@ let
   apply = pkgs.writeShellScript "bitwarden-settings" ''
     set -eu
 
-    # The app runs as "electron", so match its app.asar path rather than a name.
+    # The process is named "electron", so match on the bundle path.
     if ${lib.getExe' pkgs.procps "pgrep"} -f "/opt/Bitwarden/resources/app.asar" > /dev/null; then
       echo "bitwarden is running, leaving its settings alone" >&2
       exit 0
@@ -65,4 +65,17 @@ in
   home.activation.bitwardenSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     run ${apply}
   '';
+
+  systemd.user.services.bitwarden = {
+    Unit = {
+      Description = "Bitwarden desktop";
+      PartOf = [ "graphical-session.target" ];
+      After = [ "graphical-session.target" ];
+    };
+    Service = {
+      ExecStart = "${lib.getExe pkgs.bitwarden-desktop} --autostart";
+      Restart = "on-failure";
+    };
+    Install.WantedBy = [ "graphical-session.target" ];
+  };
 }
