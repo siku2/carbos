@@ -1,9 +1,14 @@
 // Samsung Odyssey G95NC, 7680x2160 at 240 Hz.
 //
+// Named by make, model and serial rather than by connector. The monitor runs
+// over MST, so every link retrain tears the topology down and rebuilds it,
+// and the connector comes back as the next free DP-N. It has already walked
+// from DP-4 to DP-5 on this machine.
+//
 // This is included before the dms fragments on purpose. niri keeps every
 // output block it parses and then uses the first one that matches, so the
 // dms display panel would win if it ever wrote dms/outputs.kdl.
-output "DP-4" {
+output "Samsung Electric Company Odyssey G95NC HNTL300403" {
     mode "7680x2160@240.000"
     variable-refresh-rate on-demand=true
 }
