@@ -23,32 +23,39 @@ in
         RemainAfterExit = true;
       };
 
-      # One rejected setting must not keep the rest from being applied.
       script = ''
         changed=0
 
+        # One rejected setting must not keep the rest from being applied.
+        apply() {
+          local name="$1" want="$2"
+          local file=${attrs}/$name/current_value
+
+          if [ ! -e "$file" ]; then
+            echo "$name: not offered by this firmware" >&2
+          elif [ "$(cat "$file")" = "$want" ]; then
+            :
+          elif printf '%s' "$want" > "$file"; then
+            echo "$name: set to $want"
+            changed=1
+          else
+            echo "$name: write rejected" >&2
+          fi
+        }
+
         ${lib.concatLines (
-          lib.mapAttrsToList (name: value: ''
-            if [ ! -e ${attrs}/${name}/current_value ]; then
-              echo "${name}: not offered by this firmware" >&2
-            elif [ "$(cat ${attrs}/${name}/current_value)" = "${value}" ]; then
-              :
-            elif printf '%s' "${value}" > ${attrs}/${name}/current_value; then
-              echo "${name}: set to ${value}"
-              changed=1
-            else
-              echo "${name}: write rejected" >&2
-            fi
-          '') cfg
+          lib.mapAttrsToList (name: value: "apply ${lib.escapeShellArg name} ${lib.escapeShellArg value}") cfg
         )}
 
         if [ "$changed" = 0 ]; then
           exit 0
         fi
 
-        # Firmware without an admin password applies the write directly and
-        # rejects save_settings, so a failure here is not fatal.
-        printf '1' > ${attrs}/save_settings || true
+        # Firmware without an admin password rejects save_settings and applies
+        # each write directly, so this failing is expected.
+        if ! printf '1' > ${attrs}/save_settings 2>/dev/null; then
+          echo "save_settings rejected, writes applied directly"
+        fi
 
         if [ "$(cat ${attrs}/pending_reboot)" = "1" ]; then
           echo "BIOS settings changed, reboot to apply"
