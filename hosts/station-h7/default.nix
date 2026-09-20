@@ -18,9 +18,6 @@
 
   home-manager.users.${config.carbos.user.login}.imports = [ ./home ];
 
-  # Steam, Proton and the HashiCorp tools are all unfree.
-  nixpkgs.config.allowUnfree = true;
-
   system.stateVersion = "26.05";
 
   virtualisation.vmVariant = {

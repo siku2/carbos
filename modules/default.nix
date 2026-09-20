@@ -5,6 +5,7 @@
     ./options.nix
     ./pkgs-unstable.nix
     ./system.nix
+    ./unfree.nix
     ./user.nix
   ];
 }
