@@ -23,6 +23,7 @@ in
         RemainAfterExit = true;
       };
 
+      # One rejected setting must not keep the rest from being applied.
       script = ''
         changed=0
 
@@ -30,9 +31,13 @@ in
           lib.mapAttrsToList (name: value: ''
             if [ ! -e ${attrs}/${name}/current_value ]; then
               echo "${name}: not offered by this firmware" >&2
-            elif [ "$(cat ${attrs}/${name}/current_value)" != "${value}" ]; then
-              printf '%s' "${value}" > ${attrs}/${name}/current_value
+            elif [ "$(cat ${attrs}/${name}/current_value)" = "${value}" ]; then
+              :
+            elif printf '%s' "${value}" > ${attrs}/${name}/current_value; then
+              echo "${name}: set to ${value}"
               changed=1
+            else
+              echo "${name}: write rejected" >&2
             fi
           '') cfg
         )}
