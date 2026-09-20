@@ -51,7 +51,7 @@ in
       switchModelsOnFlag = false;
       inputNeededNotifEnabled = true;
       agentPushNotifEnabled = true;
-      remoteControlAtStartup = true;
+      remoteControlAtStartup = false;
     };
   };
 
