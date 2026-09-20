@@ -3,6 +3,7 @@
   imports = [
     ./easyeffects.nix
     ./niri.nix
+    ./steam.nix
   ];
 
   # Only for gaming, which only happens on this machine. Vesktop rather than
