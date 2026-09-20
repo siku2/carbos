@@ -1,4 +1,4 @@
 {
-  # Steam and Proton on the gaming host, Discord and Plexamp for the user.
+  # Steam and Proton on the gaming host, Plexamp everywhere.
   nixpkgs.config.allowUnfree = true;
 }
