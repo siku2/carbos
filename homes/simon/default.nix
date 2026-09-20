@@ -18,6 +18,7 @@ in
 {
   imports = [
     ./ai.nix
+    ./atuin.nix
     ./bitwarden.nix
     ./dsearch.nix
     ./firefox.nix
@@ -74,22 +75,6 @@ in
     direnv = {
       enable = true;
       nix-direnv.enable = true;
-    };
-
-    atuin = {
-      enable = true;
-      package = pkgs.unstable.atuin;
-      settings = {
-        update_check = false;
-        enter_accept = true;
-        filter_mode_shell_up_key_binding = "session";
-        inline_height = 30;
-        inline_height_shell_up_key_binding = 10;
-        show_tabs = false;
-        sync = {
-          records = true;
-        };
-      };
     };
 
     ssh = {
