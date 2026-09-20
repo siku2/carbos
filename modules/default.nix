@@ -7,5 +7,6 @@
     ./system.nix
     ./unfree.nix
     ./user.nix
+    ./vm.nix
   ];
 }
