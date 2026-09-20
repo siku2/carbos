@@ -1,3 +1,4 @@
+{ config, ... }:
 let
   device = "/dev/disk/by-id/nvme-eui.0025384231407851";
 in
@@ -49,6 +50,16 @@ in
                     "noatime"
                   ];
                 };
+                # Game assets are already compressed, so zstd only costs cpu
+                # here. Kept out of /home so backups and snapshots of it do
+                # not drag a few hundred gigabytes of redownloadable data.
+                "/games" = {
+                  mountpoint = "/games";
+                  mountOptions = [
+                    "compress=no"
+                    "noatime"
+                  ];
+                };
               };
             };
           };
@@ -56,4 +67,8 @@ in
       };
     };
   };
+
+  systemd.tmpfiles.rules = [
+    "d /games 0755 ${config.carbos.user.login} users -"
+  ];
 }
