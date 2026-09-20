@@ -21,4 +21,9 @@ _: {
   services.fprintd.enable = true;
 
   services.thermald.enable = true;
+
+  # DYTC otherwise caps package power on AC.
+  carbos.thinkpad.biosSettings = {
+    AdaptiveThermalManagementAC = "MaximizePerformance";
+  };
 }

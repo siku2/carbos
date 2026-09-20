@@ -5,6 +5,14 @@
 }:
 {
   options.carbos = {
+    thinkpad.biosSettings = lib.mkOption {
+      type = lib.types.attrsOf lib.types.str;
+      default = { };
+      example = {
+        AdaptiveThermalManagementAC = "MaximizePerformance";
+      };
+    };
+
     user = {
       login = lib.mkOption {
         type = lib.types.str;
