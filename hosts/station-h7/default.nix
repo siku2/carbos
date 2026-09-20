@@ -7,6 +7,7 @@
 {
   imports = [
     inputs.chaotic.nixosModules.default
+    ./audio.nix
     ./disk.nix
     ./gaming.nix
     ./hardware.nix
