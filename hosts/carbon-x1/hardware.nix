@@ -20,8 +20,6 @@ _: {
   # Synaptics 06cb:00bd. Also turns on PAM fprintAuth.
   services.fprintd.enable = true;
 
-  services.thermald.enable = true;
-
   # DYTC otherwise caps package power on AC.
   carbos.thinkpad.biosSettings = {
     AdaptiveThermalManagementAC = "MaximizePerformance";
