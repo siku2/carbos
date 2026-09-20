@@ -1,6 +1,7 @@
 {
   config,
   lib,
+  pkgs,
   ...
 }:
 let
@@ -25,8 +26,8 @@ in
 
       script = ''
         changed=0
+        failed=0
 
-        # One rejected setting must not keep the rest from being applied.
         apply() {
           local name="$1" want="$2"
           local file=${attrs}/$name/current_value
@@ -40,6 +41,7 @@ in
             changed=1
           else
             echo "$name: write rejected" >&2
+            failed=1
           fi
         }
 
@@ -47,18 +49,43 @@ in
           lib.mapAttrsToList (name: value: "apply ${lib.escapeShellArg name} ${lib.escapeShellArg value}") cfg
         )}
 
-        if [ "$changed" = 0 ]; then
-          exit 0
+        if [ "$changed" = 1 ]; then
+          # Firmware without an admin password rejects save_settings and
+          # applies each write directly, so this failing is expected.
+          if ! printf '1' > ${attrs}/save_settings 2>/dev/null; then
+            echo "save_settings rejected, writes applied directly"
+          fi
+
+          if [ "$(cat ${attrs}/pending_reboot)" = "1" ]; then
+            echo "BIOS settings changed, reboot to apply"
+          fi
         fi
 
-        # Firmware without an admin password rejects save_settings and applies
-        # each write directly, so this failing is expected.
-        if ! printf '1' > ${attrs}/save_settings 2>/dev/null; then
-          echo "save_settings rejected, writes applied directly"
-        fi
+        exit "$failed"
+      '';
+    };
 
-        if [ "$(cat ${attrs}/pending_reboot)" = "1" ]; then
-          echo "BIOS settings changed, reboot to apply"
+    systemd.user.services.thinklmi-settings-notify = {
+      description = "Report the ThinkPad BIOS setting results";
+      wantedBy = [ "graphical-session.target" ];
+      after = [ "graphical-session.target" ];
+
+      unitConfig.ConditionPathIsDirectory = attrs;
+
+      serviceConfig.Type = "oneshot";
+
+      path = [
+        config.systemd.package
+        pkgs.libnotify
+      ];
+
+      script = ''
+        if systemctl is-failed --quiet thinklmi-settings; then
+          notify-send --urgency=critical "BIOS settings failed" \
+            "Some writes were rejected. See journalctl -u thinklmi-settings."
+        elif [ "$(cat ${attrs}/pending_reboot)" = "1" ]; then
+          notify-send --urgency=normal "BIOS settings changed" \
+            "Reboot to apply them."
         fi
       '';
     };
