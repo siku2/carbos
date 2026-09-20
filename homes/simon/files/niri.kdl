@@ -163,6 +163,8 @@ recent-windows {
     }
 }
 
+include optional=true "host.kdl"
+
 include optional=true "dms/colors.kdl"
 include optional=true "dms/layout.kdl"
 include optional=true "dms/alttab.kdl"
