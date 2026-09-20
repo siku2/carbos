@@ -9,18 +9,13 @@ let
   # touches holds a hardware mode once set, so a one-shot is enough and nothing
   # has to stay resident holding i2c and hidraw handles across a suspend.
   #
+  # The Corsair Commander Core is absent on purpose. It has no persistent
+  # lighting storage, so the only way to hold it dark is to strand it in HOST
+  # mode, which leaves its pump and fan curve unmanaged.
   blank = pkgs.writeShellApplication {
     name = "rgb-blank";
     runtimeInputs = [ pkgs.openrgb ];
     text = builtins.readFile ./rgb-blank.sh;
-  };
-
-  # Costs five seconds, and the Corsair loses USB power in S3 anyway, so this
-  # only runs at boot and on resume.
-  blankCorsair = pkgs.writeShellApplication {
-    name = "rgb-blank-corsair";
-    runtimeInputs = [ pkgs.openrgb ];
-    text = builtins.readFile ./rgb-blank-corsair.sh;
   };
 
   unit = description: {
@@ -48,10 +43,6 @@ in
       wantedBy = [
         "multi-user.target"
         "sleep.target"
-      ];
-      serviceConfig.ExecStart = [
-        (lib.getExe blank)
-        (lib.getExe blankCorsair)
       ];
     };
 
