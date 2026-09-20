@@ -14,6 +14,11 @@
     configHome = "/home/${config.carbos.user.login}";
   };
 
+  services.displayManager.autoLogin = {
+    enable = true;
+    user = config.carbos.user.login;
+  };
+
   environment.systemPackages = [
     pkgs.xwayland-satellite
     # DMS uses this for its printer management UI.

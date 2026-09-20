@@ -6,6 +6,9 @@
 {
   programs.fish.enable = true;
 
+  # Without this, the password options only apply when the account is created.
+  users.mutableUsers = false;
+
   users.users.${config.carbos.user.login} = {
     isNormalUser = true;
     description = config.carbos.user.fullName;
@@ -15,8 +18,20 @@
       "networkmanager"
       "input"
     ];
-    initialHashedPassword = "$6$eDAB8oLyIaVyxmI3$yoi5I1B8Q/EMAScuHKSOn4OU5WrNQd3a/QPl9mMTfpMFtnBgoeN.9Wyo3gYIuHc6bUCmmsx43FY.Tv3nQr5kJ/";
+    # No password at all. PAM only accepts this where nullok is set, which
+    # covers greetd and the lock screen but not sudo or polkit.
+    hashedPassword = "";
   };
+
+  security.sudo.wheelNeedsPassword = false;
+
+  security.polkit.extraConfig = ''
+    polkit.addRule(function (action, subject) {
+      if (subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+      }
+    });
+  '';
 
   home-manager = {
     useGlobalPkgs = true;
