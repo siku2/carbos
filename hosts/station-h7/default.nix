@@ -16,7 +16,7 @@
 
   networking.hostName = "station-h7";
 
-  home-manager.users.${config.carbos.user.login}.imports = [ ./home.nix ];
+  home-manager.users.${config.carbos.user.login}.imports = [ ./home ];
 
   # Steam, Proton and the HashiCorp tools are all unfree.
   nixpkgs.config.allowUnfree = true;
