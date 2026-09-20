@@ -1,10 +1,12 @@
 {
   config,
+  inputs,
   lib,
   ...
 }:
 {
   imports = [
+    inputs.chaotic.nixosModules.default
     ./disk.nix
     ./gaming.nix
     ./hardware.nix

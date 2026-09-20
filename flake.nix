@@ -43,44 +43,37 @@
       ...
     }@inputs:
     let
+      inherit (nixpkgs) lib;
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
       treefmtEval = inputs.treefmt-nix.lib.evalModule pkgs ./treefmt.nix;
+
+      hosts = builtins.attrNames (builtins.readDir ./hosts);
     in
     {
-      nixosConfigurations = {
-        carbon-x1 = nixpkgs.lib.nixosSystem {
+      # Every directory under ./hosts is a machine. A host pulls in whatever
+      # extra modules it needs itself, so nothing here is host specific.
+      nixosConfigurations = lib.genAttrs hosts (
+        name:
+        lib.nixosSystem {
           inherit system;
           specialArgs = {
             inherit inputs;
           };
           modules = [
-            ./hosts/carbon-x1
+            ./hosts/${name}
             inputs.disko.nixosModules.disko
             inputs.home-manager.nixosModules.home-manager
           ];
-        };
-
-        station-h7 = nixpkgs.lib.nixosSystem {
-          inherit system;
-          specialArgs = {
-            inherit inputs;
-          };
-          modules = [
-            ./hosts/station-h7
-            inputs.chaotic.nixosModules.default
-            inputs.disko.nixosModules.disko
-            inputs.home-manager.nixosModules.home-manager
-          ];
-        };
-      };
+        }
+      );
 
       packages.${system}.kexec-installer = inputs.nixos-generators.nixosGenerate {
         inherit system;
         format = "kexec-bundle";
         modules = [
           inputs.disko.nixosModules.disko
-          ./hosts/installer
+          ./installer
         ];
       };
 
