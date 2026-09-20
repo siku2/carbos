@@ -49,6 +49,7 @@ in
       libsecret
       nautilus
       nextcloud-talk-desktop
+      plexamp
       seahorse
       unstable.secretspec
       wl-clipboard
