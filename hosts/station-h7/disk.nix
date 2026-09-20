@@ -50,10 +50,8 @@ in
                     "noatime"
                   ];
                 };
-                # Game assets are already compressed, so zstd only costs cpu
-                # here. Kept out of /home to keep its snapshots small, but not
-                # disposable: steamapps/compatdata holds the wine prefixes,
-                # which are game state rather than a redownload.
+                # Already compressed, so zstd only costs cpu. Split from
+                # /home, but compatdata's wine prefixes are game state.
                 "/games" = {
                   mountpoint = "/games";
                   mountOptions = [

@@ -1,21 +1,13 @@
-// Samsung Odyssey G95NC, 7680x2160 at 240 Hz.
-//
-// Named by make, model and serial rather than by connector. The monitor runs
-// over MST, so every link retrain tears the topology down and rebuilds it,
-// and the connector comes back as the next free DP-N. It has already walked
-// from DP-4 to DP-5 on this machine.
-//
-// This is included before the dms fragments on purpose. niri keeps every
-// output block it parses and then uses the first one that matches, so the
-// dms display panel would win if it ever wrote dms/outputs.kdl.
+// Named by edid, not connector: MST retrains renumber DP-N (DP-4 to DP-5
+// here already). Included first because niri takes the first matching
+// output block, and dms/outputs.kdl would otherwise win.
 output "Samsung Electric Company Odyssey G95NC HNTL300403" {
     mode "7680x2160@240.000"
     variable-refresh-rate on-demand=true
 }
 
 layout {
-    // A quarter of 7680 is 1920, a half is a 16:9 3840x2160 and three
-    // quarters is 24:9.
+    // Half of 7680 is a 16:9 3840x2160, three quarters is 24:9.
     preset-column-widths {
         proportion 0.25
         proportion 0.33333
@@ -26,8 +18,6 @@ layout {
     default-column-width { proportion 0.33333; }
 }
 
-// Half the screen is exactly 16:9, which leaves a quarter on either side for
-// chat, music and a browser. Mod+R widens a 24:9 title to three quarters.
 window-rule {
     match app-id=r#"^gamescope$"#
     match app-id=r#"^steam_app_\d+$"#

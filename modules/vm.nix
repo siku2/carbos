@@ -1,7 +1,6 @@
 { lib, ... }:
 {
-  # Shared by `nixos-rebuild build-vm` on every host. Hosts add their own ssh
-  # keys, since there is no login password to fall back on.
+  # Hosts add their own ssh keys, since there is no login password.
   virtualisation.vmVariant = {
     virtualisation = {
       cores = 4;

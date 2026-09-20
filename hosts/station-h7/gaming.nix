@@ -13,19 +13,16 @@
 
   programs.gamemode.enable = true;
 
-  # xpad declares no reset_resume, so a pad that gets reset across suspend
-  # comes back dead until it is replugged. xone's wired driver declares no pm
-  # hooks at all, which makes the usb core reprobe it on every resume.
+  # xpad has no reset_resume, so a pad reset across suspend stays dead until
+  # replugged. xone's wired driver has no pm hooks, so usb reprobes it.
   hardware.xone.enable = true;
 
-  # The symlinked steam library needs a real directory to point at.
   systemd.tmpfiles.rules = [
     "d /games/steamapps 0755 ${config.carbos.user.login} users -"
   ];
 
-  # niri is sRGB only, so HDR lives in the gamescope session instead of the
-  # desktop. Without the specialisation it is just another entry at the
-  # greeter, and the env vars it sets stay on the gamescope wrapper.
+  # niri is sRGB only, so HDR runs only in the gamescope session. Without
+  # the specialisation it is one more greeter entry, env vars and all.
   chaotic.hdr = {
     enable = true;
     specialisation.enable = false;

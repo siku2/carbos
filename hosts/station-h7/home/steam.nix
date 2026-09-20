@@ -1,8 +1,6 @@
 { config, ... }:
 {
-  # Steam rewrites libraryfolders.vdf on its own, so the library lives here
-  # rather than in its config. Everything lands on /games with no setup, and
-  # Steam's free space check follows the link to the right subvolume.
+  # Steam rewrites libraryfolders.vdf itself, so use a symlink instead.
   home.file.".local/share/Steam/steamapps".source =
     config.lib.file.mkOutOfStoreSymlink "/games/steamapps";
 }

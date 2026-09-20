@@ -33,7 +33,6 @@
 
     graphics = {
       enable = true;
-      # 32-bit Vulkan and GL for older titles under Proton.
       enable32Bit = true;
     };
 

@@ -7,9 +7,8 @@
 let
   dataFile = "${config.home.homeDirectory}/.config/Bitwarden/data.json";
 
-  # There is no policy file, so these go straight into the app's own state.
-  # Keys are "global_<stateDefinition>_<key>" and a Bitwarden update can rename
-  # them, in which case they silently stop applying.
+  # No policy file: these are the app's own state keys, which a Bitwarden
+  # update can rename and silently stop applying.
   managed = {
     # rbw-agent serves ssh now.
     global_desktopSettings_sshAgentEnabled = false;

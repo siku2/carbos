@@ -6,7 +6,6 @@
     ./steam.nix
   ];
 
-  # Only for gaming, which only happens on this machine. Vesktop rather than
-  # the official client because it is the one that can share audio on Wayland.
+  # Vesktop instead of the official client: it can share audio on Wayland.
   home.packages = [ pkgs.vesktop ];
 }

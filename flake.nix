@@ -51,8 +51,7 @@
       hosts = builtins.attrNames (builtins.readDir ./hosts);
     in
     {
-      # Every directory under ./hosts is a machine. A host pulls in whatever
-      # extra modules it needs itself, so nothing here is host specific.
+      # Each host pulls in whatever extra modules it needs itself.
       nixosConfigurations = lib.genAttrs hosts (
         name:
         lib.nixosSystem {

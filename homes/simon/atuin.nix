@@ -33,8 +33,7 @@ in
     };
   };
 
-  # Without the key a new machine silently starts its own history stream and
-  # cannot read what the others have synced.
+  # Without the key a new machine starts its own history stream.
   systemd.user.services.atuin-key = {
     Unit = {
       Description = "Seed the atuin sync key";

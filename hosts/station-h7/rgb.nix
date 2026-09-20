@@ -4,14 +4,9 @@
   ...
 }:
 let
-  # Controllers reload their firmware defaults on power-up and on resume, and
-  # the DDR5 sticks keep their own rail alive through S3. Everything the script
-  # touches holds a hardware mode once set, so a one-shot is enough and nothing
-  # has to stay resident holding i2c and hidraw handles across a suspend.
-  #
-  # The Corsair Commander Core is absent on purpose. It has no persistent
-  # lighting storage, so the only way to hold it dark is to strand it in HOST
-  # mode, which leaves its pump and fan curve unmanaged.
+  # Controllers and DDR5 RGB restore state on resume, so one-shot is enough.
+  # Corsair Commander Core has no persistent lighting storage, so the only way
+  # to blank it is HOST mode, which leaves its pump and fan curve unmanaged.
   blank = pkgs.writeShellApplication {
     name = "rgb-blank";
     runtimeInputs = [ pkgs.openrgb ];
