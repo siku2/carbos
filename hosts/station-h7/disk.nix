@@ -51,8 +51,9 @@ in
                   ];
                 };
                 # Game assets are already compressed, so zstd only costs cpu
-                # here. Kept out of /home so backups and snapshots of it do
-                # not drag a few hundred gigabytes of redownloadable data.
+                # here. Kept out of /home to keep its snapshots small, but not
+                # disposable: steamapps/compatdata holds the wine prefixes,
+                # which are game state rather than a redownload.
                 "/games" = {
                   mountpoint = "/games";
                   mountOptions = [
