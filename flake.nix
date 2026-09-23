@@ -69,75 +69,77 @@
         };
       };
 
-      configuration = { ... }: {
-        nix = {
-          settings = {
-            experimental-features = "nix-command flakes";
-            trusted-users = [
-              "root"
-              "simon"
+      configuration =
+        { pkgs, ... }:
+        {
+          nix = {
+            settings = {
+              experimental-features = "nix-command flakes";
+              trusted-users = [
+                "root"
+                "simon"
+              ];
+              # We have the store on a case-sensitive APFS.
+              use-case-hack = false;
+            };
+
+            gc = {
+              automatic = true;
+              options = "--delete-older-than 14d";
+            };
+          };
+
+          system = {
+            configurationRevision = self.rev or self.dirtyRev or null;
+            stateVersion = 6;
+          };
+
+          nixpkgs = {
+            hostPlatform = system;
+            config.allowUnfree = true;
+            overlays = [ overlay ];
+          };
+
+          system.primaryUser = "simon";
+          users.users.simon = {
+            home = "/Users/simon";
+          };
+
+          networking.hostName = "itma-23001";
+
+          homebrew = {
+            enable = true;
+
+            onActivation = {
+              autoUpdate = true;
+              upgrade = true;
+              cleanup = "zap";
+            };
+
+            taps = [
+              "homebrew/core"
+              {
+                name = "inomotech/inomotech";
+                trusted = true;
+              }
             ];
-            # We have the store on a case-sensitive APFS.
-            use-case-hack = false;
+
+            casks = [
+              "1password"
+              "cutter"
+              "docker-desktop"
+              "firefox"
+              "google-chrome"
+              "inkscape"
+              "microsoft-teams"
+              "tailscale-app"
+              "windows-app"
+              "zed@preview"
+            ];
           };
 
-          gc = {
-            automatic = true;
-            options = "--delete-older-than 14d";
-          };
+          documentation.enable = false;
         };
-
-        system = {
-          configurationRevision = self.rev or self.dirtyRev or null;
-          stateVersion = 6;
-        };
-
-        nixpkgs = {
-          hostPlatform = system;
-          config.allowUnfree = true;
-          overlays = [ overlay ];
-        };
-
-        system.primaryUser = "simon";
-        users.users.simon = {
-          home = "/Users/simon";
-        };
-
-        networking.hostName = "itma-23001";
-
-        homebrew = {
-          enable = true;
-
-          onActivation = {
-            autoUpdate = true;
-            upgrade = true;
-            cleanup = "zap";
-          };
-
-          taps = [
-            "homebrew/core"
-            {
-              name = "inomotech/inomotech";
-              trusted = true;
-            }
-          ];
-
-          casks = [
-            "1password"
-            "cutter"
-            "docker-desktop"
-            "firefox"
-            "google-chrome"
-            "inkscape"
-            "microsoft-teams"
-            "tailscale-app"
-            "windows-app"
-            "zed@preview"
-          ];
-        };
-
-        documentation.enable = false;
-      };
     in
     {
       devShells.${system} = import ./devshells.nix {
