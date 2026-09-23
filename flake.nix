@@ -117,6 +117,9 @@
             firefox-bin
             google-chrome
             inkscape
+            podman
+            podman-compose
+            podman-desktop
           ];
 
           programs._1password-gui.enable = true;
@@ -142,7 +145,6 @@
 
             casks = [
               "cutter"
-              "docker-desktop"
               "microsoft-teams"
               "windows-app"
               "zed@preview"
