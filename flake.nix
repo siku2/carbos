@@ -55,6 +55,11 @@
         codex = unstablePkgs.codex;
         claude-code = unstablePkgs.claude-code;
 
+        # These apps normally self-update. Under nix they are pinned to the flake,
+        # so track unstable to pick up security releases sooner.
+        firefox-bin = unstablePkgs.firefox-bin;
+        google-chrome = unstablePkgs.google-chrome;
+
         cargo-clean-all = prev.rustPlatform.buildRustPackage {
           pname = "cargo-clean-all";
           version = "0.6.5";
@@ -107,6 +112,12 @@
 
           networking.hostName = "itma-23001";
 
+          environment.systemPackages = with pkgs; [
+            firefox-bin
+            google-chrome
+            inkscape
+          ];
+
           homebrew = {
             enable = true;
 
@@ -128,9 +139,6 @@
               "1password"
               "cutter"
               "docker-desktop"
-              "firefox"
-              "google-chrome"
-              "inkscape"
               "microsoft-teams"
               "tailscale-app"
               "windows-app"
