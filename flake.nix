@@ -59,6 +59,7 @@
         # so track unstable to pick up security releases sooner.
         firefox-bin = unstablePkgs.firefox-bin;
         google-chrome = unstablePkgs.google-chrome;
+        _1password-gui = unstablePkgs._1password-gui;
 
         cargo-clean-all = prev.rustPlatform.buildRustPackage {
           pname = "cargo-clean-all";
@@ -118,6 +119,8 @@
             inkscape
           ];
 
+          programs._1password-gui.enable = true;
+
           homebrew = {
             enable = true;
 
@@ -136,7 +139,6 @@
             ];
 
             casks = [
-              "1password"
               "cutter"
               "docker-desktop"
               "microsoft-teams"
