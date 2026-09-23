@@ -16,6 +16,10 @@
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    treefmt-nix = {
+      url = "github:numtide/treefmt-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -26,6 +30,7 @@
       nix-darwin,
       home-manager,
       rust-overlay,
+      treefmt-nix,
     }:
     let
       system = "aarch64-darwin";
@@ -43,6 +48,8 @@
           rust-overlay.overlays.default
         ];
       };
+
+      treefmtEval = treefmt-nix.lib.evalModule pkgs ./treefmt.nix;
 
       overlay = final: prev: {
         codex = unstablePkgs.codex;
@@ -137,6 +144,10 @@
         inherit pkgs;
         inherit (nixpkgs) lib;
       };
+
+      formatter.${system} = treefmtEval.config.build.wrapper;
+
+      checks.${system}.formatting = treefmtEval.config.build.check self;
 
       darwinConfigurations."itma-23001" = nix-darwin.lib.darwinSystem {
         modules = [
