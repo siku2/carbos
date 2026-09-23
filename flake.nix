@@ -121,6 +121,8 @@
 
           programs._1password-gui.enable = true;
 
+          services.tailscale.enable = true;
+
           homebrew = {
             enable = true;
 
@@ -142,7 +144,6 @@
               "cutter"
               "docker-desktop"
               "microsoft-teams"
-              "tailscale-app"
               "windows-app"
               "zed@preview"
             ];
