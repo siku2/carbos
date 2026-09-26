@@ -87,11 +87,25 @@
               ];
               # We have the store on a case-sensitive APFS.
               use-case-hack = false;
+
+              auto-optimise-store = true;
             };
 
             gc = {
               automatic = true;
               options = "--delete-older-than 14d";
+            };
+
+            optimise = {
+              automatic = true;
+              # After the GC run above, so it scans fewer paths.
+              interval = [
+                {
+                  Weekday = 1;
+                  Hour = 13;
+                  Minute = 30;
+                }
+              ];
             };
           };
 
