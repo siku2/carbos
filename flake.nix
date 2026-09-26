@@ -161,7 +161,7 @@
             onActivation = {
               autoUpdate = true;
               upgrade = true;
-              cleanup = "uninstall";
+              cleanup = "zap";
             };
 
             taps = [
