@@ -125,6 +125,14 @@
 
             # Finder's "Remove items from the Trash after 30 days".
             defaults.finder.FXRemoveOldTrashItems = true;
+
+            # Spotlight has no nix-darwin option and its exclusion list lives in
+            # a SIP-protected plist, so drive mdutil directly.
+            activationScripts.postActivation.text = ''
+              if [ -d /Volumes/Projects ]; then
+                /usr/bin/mdutil -i off /Volumes/Projects >/dev/null
+              fi
+            '';
           };
 
           nixpkgs = {
