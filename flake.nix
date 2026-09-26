@@ -89,6 +89,9 @@
               use-case-hack = false;
 
               auto-optimise-store = true;
+
+              min-free = 10737418240; # 10 GiB
+              max-free = 53687091200; # 50 GiB
             };
 
             gc = {
