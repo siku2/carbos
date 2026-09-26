@@ -122,6 +122,9 @@
           system = {
             configurationRevision = self.rev or self.dirtyRev or null;
             stateVersion = 6;
+
+            # Finder's "Remove items from the Trash after 30 days".
+            defaults.finder.FXRemoveOldTrashItems = true;
           };
 
           nixpkgs = {
