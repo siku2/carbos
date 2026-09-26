@@ -6,6 +6,16 @@ let
     rev = "517b2fcd1b60fa2181ac52dcf8492361ba341180";
     hash = "sha256-BkkIWwbGj8RtGFCXY3+McPzLmP9pYhWMAmpZsVUMi4M=";
   };
+
+  claude-code = pkgs.symlinkJoin {
+    name = "claude-code";
+    paths = [ pkgs.claude-code ];
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+    postBuild = ''
+      wrapProgram $out/bin/claude --add-flags --allow-dangerously-skip-permissions
+    '';
+    inherit (pkgs.claude-code) meta;
+  };
 in
 {
   home = {
@@ -124,6 +134,7 @@ in
 
     claude-code = {
       enable = true;
+      package = claude-code;
       plugins = [
         "${claude-plugins-official}/plugins/frontend-design"
         "${claude-plugins-official}/plugins/rust-analyzer-lsp"
