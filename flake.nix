@@ -59,6 +59,7 @@
         # so track unstable to pick up security releases sooner.
         firefox-bin = unstablePkgs.firefox-bin;
         google-chrome = unstablePkgs.google-chrome;
+        _1password-cli = unstablePkgs._1password-cli;
         _1password-gui = unstablePkgs._1password-gui;
 
         cargo-clean-all = prev.rustPlatform.buildRustPackage {
@@ -157,7 +158,10 @@
             podman-desktop
           ];
 
-          programs._1password-gui.enable = true;
+          programs = {
+            _1password.enable = true;
+            _1password-gui.enable = true;
+          };
 
           security.pam.services.sudo_local.touchIdAuth = true;
 
