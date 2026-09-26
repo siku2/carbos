@@ -96,6 +96,13 @@
 
             gc = {
               automatic = true;
+              interval = [
+                {
+                  Weekday = 1;
+                  Hour = 12;
+                  Minute = 30;
+                }
+              ];
               options = "--delete-older-than 14d";
             };
 
