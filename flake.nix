@@ -151,6 +151,8 @@
 
           programs._1password-gui.enable = true;
 
+          security.pam.services.sudo_local.touchIdAuth = true;
+
           services.tailscale.enable = true;
 
           homebrew = {
