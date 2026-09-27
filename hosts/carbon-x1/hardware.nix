@@ -49,4 +49,6 @@ _: {
     VTdFeature = "Enable";
     WindowsUEFIFirmwareUpdate = "Enable";
   };
+
+  carbos.thinkpad.batteryChargeLimit = 80;
 }

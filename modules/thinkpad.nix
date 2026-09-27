@@ -6,13 +6,18 @@
 }:
 let
   cfg = config.carbos.thinkpad.biosSettings;
+  batteryChargeLimit = config.carbos.thinkpad.batteryChargeLimit;
   attrs = "/sys/class/firmware-attributes/thinklmi/attributes";
 in
 {
-  config = lib.mkIf (cfg != { }) {
-    boot.kernelModules = [ "think_lmi" ];
+  config = {
+    services.udev.extraRules = lib.mkIf (batteryChargeLimit != null) ''
+      ACTION=="add|change", SUBSYSTEM=="power_supply", KERNEL=="BAT*", ATTR{charge_control_end_threshold}="${toString batteryChargeLimit}"
+    '';
 
-    systemd.services.thinklmi-settings = {
+    boot.kernelModules = lib.mkIf (cfg != { }) [ "think_lmi" ];
+
+    systemd.services.thinklmi-settings = lib.mkIf (cfg != { }) {
       description = "Apply ThinkPad BIOS settings";
       wantedBy = [ "multi-user.target" ];
       after = [ "systemd-modules-load.service" ];
@@ -65,7 +70,7 @@ in
       '';
     };
 
-    systemd.user.services.thinklmi-settings-notify = {
+    systemd.user.services.thinklmi-settings-notify = lib.mkIf (cfg != { }) {
       description = "Report the ThinkPad BIOS setting results";
       wantedBy = [ "graphical-session.target" ];
       after = [ "graphical-session.target" ];
