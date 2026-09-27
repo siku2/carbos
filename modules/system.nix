@@ -55,7 +55,15 @@
 
   services.upower.enable = true;
 
+  services.fwupd.enable = true;
+
   services.fstrim.enable = true;
+
+  services.smartd = {
+    enable = true;
+    notifications.wall.enable = false;
+    notifications.systembus-notify.enable = true;
+  };
 
   hardware.bluetooth.enable = true;
 

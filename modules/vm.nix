@@ -14,6 +14,9 @@
 
     services.openssh.enable = true;
 
+    services.fwupd.enable = lib.mkForce false;
+    services.smartd.enable = lib.mkForce false;
+
     networking.firewall.enable = lib.mkForce false;
   };
 }
