@@ -62,8 +62,21 @@
         _1password-cli = unstablePkgs._1password-cli;
         _1password-gui = unstablePkgs._1password-gui;
         chatgpt = unstablePkgs.chatgpt;
+        zed-editor = unstablePkgs.zed-editor;
+        # nixpkgs lags behind the releases by months and its fixup phase breaks
+        # the code signature.
+        teams = unstablePkgs.teams.overrideAttrs rec {
+          version = "26225.1708.5124.9749";
+          src = prev.fetchurl {
+            url = "https://statics.teams.cdn.office.net/production-osx/${version}/MicrosoftTeams.pkg";
+            hash = "sha256-s7kTIaQKH7MK7nuY3msuVEvpNLN07MJLHK8fJ9YQJ58=";
+          };
+          dontFixup = true;
+        };
 
         claude-desktop = final.callPackage ./pkgs/claude-desktop.nix { };
+        cutter = final.callPackage ./pkgs/cutter.nix { };
+        windows-app = final.callPackage ./pkgs/windows-app.nix { };
 
         cargo-clean-all = prev.rustPlatform.buildRustPackage {
           pname = "cargo-clean-all";
@@ -155,12 +168,15 @@
           environment.systemPackages = with pkgs; [
             chatgpt
             claude-desktop
+            cutter
             firefox-bin
             google-chrome
             inkscape
             podman
             podman-compose
             podman-desktop
+            teams
+            windows-app
           ];
 
           programs = {
@@ -171,31 +187,6 @@
           security.pam.services.sudo_local.touchIdAuth = true;
 
           services.tailscale.enable = true;
-
-          homebrew = {
-            enable = true;
-
-            onActivation = {
-              autoUpdate = true;
-              upgrade = true;
-              cleanup = "zap";
-            };
-
-            taps = [
-              "homebrew/core"
-              {
-                name = "inomotech/inomotech";
-                trusted = true;
-              }
-            ];
-
-            casks = [
-              "cutter"
-              "microsoft-teams"
-              "windows-app"
-              "zed@preview"
-            ];
-          };
 
           documentation.enable = false;
         };
