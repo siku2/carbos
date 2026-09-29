@@ -62,6 +62,8 @@
         _1password-cli = unstablePkgs._1password-cli;
         _1password-gui = unstablePkgs._1password-gui;
 
+        claude-desktop = final.callPackage ./pkgs/claude-desktop.nix { };
+
         cargo-clean-all = prev.rustPlatform.buildRustPackage {
           pname = "cargo-clean-all";
           version = "0.6.5";
@@ -150,6 +152,7 @@
           networking.hostName = "itma-23001";
 
           environment.systemPackages = with pkgs; [
+            claude-desktop
             firefox-bin
             google-chrome
             inkscape
