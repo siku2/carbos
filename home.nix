@@ -86,7 +86,10 @@ in
       '';
     };
 
-    starship.enable = true;
+    starship = {
+      enable = true;
+      settings.gcloud.disabled = true;
+    };
 
     bash.enable = true;
     zsh = {
