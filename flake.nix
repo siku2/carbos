@@ -74,6 +74,7 @@
           dontFixup = true;
         };
 
+        binaryninja-free = final.callPackage ./pkgs/binaryninja-free.nix { };
         claude-desktop = final.callPackage ./pkgs/claude-desktop.nix { };
         cutter = final.callPackage ./pkgs/cutter.nix { };
         windows-app = final.callPackage ./pkgs/windows-app.nix { };
@@ -166,6 +167,7 @@
           networking.hostName = "itma-23001";
 
           environment.systemPackages = with pkgs; [
+            binaryninja-free
             chatgpt
             claude-desktop
             cutter
