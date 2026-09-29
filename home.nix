@@ -18,6 +18,8 @@ let
   };
 in
 {
+  imports = [ ./home/rdp.nix ];
+
   home = {
     username = "simon";
     stateVersion = "26.05";
