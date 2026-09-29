@@ -189,6 +189,7 @@
           security.pam.services.sudo_local.touchIdAuth = true;
 
           services.tailscale.enable = true;
+          environment.etc."resolver/inomo.tech".text = "nameserver 100.100.100.100";
 
           documentation.enable = false;
         };
