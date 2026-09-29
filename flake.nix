@@ -61,6 +61,7 @@
         google-chrome = unstablePkgs.google-chrome;
         _1password-cli = unstablePkgs._1password-cli;
         _1password-gui = unstablePkgs._1password-gui;
+        chatgpt = unstablePkgs.chatgpt;
 
         claude-desktop = final.callPackage ./pkgs/claude-desktop.nix { };
 
@@ -152,6 +153,7 @@
           networking.hostName = "itma-23001";
 
           environment.systemPackages = with pkgs; [
+            chatgpt
             claude-desktop
             firefox-bin
             google-chrome
