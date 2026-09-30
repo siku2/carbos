@@ -141,8 +141,12 @@
             configurationRevision = self.rev or self.dirtyRev or null;
             stateVersion = 6;
 
-            # Finder's "Remove items from the Trash after 30 days".
-            defaults.finder.FXRemoveOldTrashItems = true;
+            defaults = {
+              # Finder's "Remove items from the Trash after 30 days".
+              finder.FXRemoveOldTrashItems = true;
+
+              CustomUserPreferences."com.microsoft.autoupdate2".HowToCheck = "Manual";
+            };
 
             # Spotlight has no nix-darwin option and its exclusion list lives in
             # a SIP-protected plist, so drive mdutil directly.
