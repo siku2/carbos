@@ -145,7 +145,10 @@
               # Finder's "Remove items from the Trash after 30 days".
               finder.FXRemoveOldTrashItems = true;
 
-              CustomUserPreferences."com.microsoft.autoupdate2".HowToCheck = "Manual";
+              CustomUserPreferences."com.microsoft.autoupdate2" = {
+                HowToCheck = "Manual";
+                StartDaemonOnAppLaunch = false;
+              };
             };
 
             # Spotlight has no nix-darwin option and its exclusion list lives in
