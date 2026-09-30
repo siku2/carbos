@@ -65,6 +65,62 @@ in
 
     gpg.enable = true;
 
+    ssh = {
+      enable = true;
+      enableDefaultConfig = false;
+      settings = {
+        "*" = {
+          # Need to override this because the macOS default is just "UTF-8".
+          SendEnv = "LC_CTYPE";
+          SetEnv.LC_CTYPE = "en_US.UTF-8";
+        };
+
+        itma-1909 = {
+          HostName = "itma-1909";
+          User = "simon";
+        };
+
+        ml-pc = {
+          HostName = "ml-pc-ch.streetscooter.ch";
+          User = "simon.berger";
+          PreferredAuthentications = "publickey,password";
+        };
+
+        as-314.HostName = "as-314.streetscooter.ch";
+
+        bms3-emc.User = "emc-tester";
+
+        olu-dev-proxy = {
+          HostName = "autopi-1faf5d7aad13afa15bae7497fdce0f00";
+          User = "pi";
+        };
+
+        olu-dev = {
+          HostName = "192.168.1.101";
+          ProxyJump = "olu-dev-proxy";
+          User = "root";
+          IdentityFile = "~/Documents/certificates/olu-dev/id_ssh_dev10";
+          PubkeyAcceptedKeyTypes = "+ssh-rsa";
+          HostKeyAlgorithms = "+ssh-rsa";
+        };
+
+        tailscale-relay = {
+          HostName = "10.90.10.31";
+          User = "simon";
+        };
+
+        forgejo-runner = {
+          HostName = "forgejo-runner.inomo.tech";
+          User = "simon";
+        };
+
+        github-runner = {
+          HostName = "github-runner.inomo.tech";
+          User = "simon";
+        };
+      };
+    };
+
     direnv = {
       enable = true;
       enableBashIntegration = true;
