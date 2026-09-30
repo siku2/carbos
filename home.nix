@@ -25,6 +25,11 @@ in
     stateVersion = "26.05";
   };
 
+  rdp.connections.enif = {
+    "full address" = "enif.pegasus.inomo.tech";
+    username = "Administrator";
+  };
+
   programs = {
     gh.enable = true;
     git = {
