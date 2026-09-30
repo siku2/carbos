@@ -75,21 +75,6 @@ in
           SetEnv.LC_CTYPE = "en_US.UTF-8";
         };
 
-        itma-1909 = {
-          HostName = "itma-1909";
-          User = "simon";
-        };
-
-        ml-pc = {
-          HostName = "ml-pc-ch.streetscooter.ch";
-          User = "simon.berger";
-          PreferredAuthentications = "publickey,password";
-        };
-
-        as-314.HostName = "as-314.streetscooter.ch";
-
-        bms3-emc.User = "emc-tester";
-
         olu-dev-proxy = {
           HostName = "autopi-1faf5d7aad13afa15bae7497fdce0f00";
           User = "pi";
