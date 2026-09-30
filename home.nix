@@ -90,17 +90,17 @@ in
         };
 
         tailscale-relay = {
-          HostName = "10.90.10.31";
+          HostName = "tailscale-relay.bt12.inomo.tech";
           User = "simon";
         };
 
         forgejo-runner = {
-          HostName = "forgejo-runner.inomo.tech";
+          HostName = "forgejo-runner.bt12.inomo.tech";
           User = "simon";
         };
 
         github-runner = {
-          HostName = "github-runner.inomo.tech";
+          HostName = "github-runner.bt12.inomo.tech";
           User = "simon";
         };
       };
