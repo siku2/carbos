@@ -103,6 +103,13 @@ in
           HostName = "github-runner.bt12.inomo.tech";
           User = "simon";
         };
+
+        sw1 = {
+          HostName = "sw1.bt12.inomo.tech";
+          User = "manager";
+          KexAlgorithms = "+diffie-hellman-group14-sha1";
+          HostKeyAlgorithms = "+ssh-rsa";
+        };
       };
     };
 
