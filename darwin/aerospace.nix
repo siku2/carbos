@@ -51,17 +51,6 @@ in
           "mode main"
         ];
       };
-
-      on-window-detected = [
-        {
-          "if".app-id = "com.1password.1password";
-          run = "layout floating";
-        }
-        {
-          "if".app-id = "com.apple.systempreferences";
-          run = "layout floating";
-        }
-      ];
     };
   };
 
