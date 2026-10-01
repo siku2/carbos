@@ -54,18 +54,6 @@ in
 
       on-window-detected = [
         {
-          "if".app-id = "dev.zed.Zed";
-          run = "move-node-to-workspace 1";
-        }
-        {
-          "if".app-id = "org.mozilla.firefox";
-          run = "move-node-to-workspace 2";
-        }
-        {
-          "if".app-id = "com.microsoft.teams2";
-          run = "move-node-to-workspace 3";
-        }
-        {
           "if".app-id = "com.1password.1password";
           run = "layout floating";
         }
