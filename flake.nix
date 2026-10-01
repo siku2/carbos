@@ -223,6 +223,7 @@
         modules = [
           configuration
           ./darwin/aerospace.nix
+          ./darwin/alt-tab.nix
           home-manager.darwinModules.home-manager
           {
             home-manager.useGlobalPkgs = true;
