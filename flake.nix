@@ -55,9 +55,9 @@
         codex = unstablePkgs.codex;
         claude-code = unstablePkgs.claude-code;
 
-        # These apps normally self-update. Under nix they are pinned to the flake,
-        # so track unstable to pick up security releases sooner.
-        firefox-bin = unstablePkgs.firefox-bin;
+        # "unwrapped" to preserve signature for 1password.
+        firefox-bin-unwrapped = unstablePkgs.firefox-bin-unwrapped;
+
         google-chrome = unstablePkgs.google-chrome;
         _1password-cli = unstablePkgs._1password-cli;
         _1password-gui = unstablePkgs._1password-gui;
@@ -178,7 +178,7 @@
             chatgpt
             claude-desktop
             cutter
-            firefox-bin
+            firefox-bin-unwrapped
             google-chrome
             inkscape
             podman
