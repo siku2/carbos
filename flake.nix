@@ -222,6 +222,7 @@
             home-manager.users.simon = ./home.nix;
 
             # TEMP!
+          ./darwin/aerospace.nix
             home-manager.backupFileExtension = "hm-backup";
           }
         ];
