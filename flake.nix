@@ -142,6 +142,14 @@
             stateVersion = 6;
 
             defaults = {
+              dock = {
+                autohide = true;
+                # Never show on hover. Cmd-Opt-D still toggles it.
+                autohide-delay = 1000.0;
+                show-recents = false;
+                mru-spaces = false;
+              };
+
               # Finder's "Remove items from the Trash after 30 days".
               finder.FXRemoveOldTrashItems = true;
 
@@ -214,6 +222,7 @@
       darwinConfigurations."itma-23001" = nix-darwin.lib.darwinSystem {
         modules = [
           configuration
+          ./darwin/aerospace.nix
           home-manager.darwinModules.home-manager
           {
             home-manager.useGlobalPkgs = true;
@@ -222,7 +231,6 @@
             home-manager.users.simon = ./home.nix;
 
             # TEMP!
-          ./darwin/aerospace.nix
             home-manager.backupFileExtension = "hm-backup";
           }
         ];
