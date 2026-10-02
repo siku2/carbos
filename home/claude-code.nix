@@ -26,6 +26,7 @@ in
       "${claude-plugins-official}/plugins/rust-analyzer-lsp"
     ];
     context = ./claude-code/CLAUDE.md;
+    rules.rust = ./claude-code/rules/rust.md;
     settings = {
       env = {
         CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY = "1";
