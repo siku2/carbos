@@ -228,9 +228,6 @@
             home-manager.useUserPackages = true;
             home-manager.extraSpecialArgs = { inherit inputs; };
             home-manager.users.simon = ./home.nix;
-
-            # TEMP!
-            home-manager.backupFileExtension = "hm-backup";
           }
         ];
       };
