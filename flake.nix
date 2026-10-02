@@ -222,7 +222,6 @@
       darwinConfigurations."itma-23001" = nix-darwin.lib.darwinSystem {
         modules = [
           configuration
-          ./darwin/alt-tab.nix
           home-manager.darwinModules.home-manager
           {
             home-manager.useGlobalPkgs = true;
