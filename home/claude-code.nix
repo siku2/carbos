@@ -29,7 +29,11 @@ in
       env = {
         CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY = "1";
       };
-      includeCoAuthoredBy = false;
+      attribution = {
+        commit = "";
+        pr = "";
+        sessionUrl = false;
+      };
       enableArtifact = false;
       feedbackDrafts = "off";
       askUserQuestionTimeout = "10m";
