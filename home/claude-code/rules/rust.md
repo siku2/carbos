@@ -1,34 +1,56 @@
 ---
 paths:
   - "**/*.rs"
-  - "**/Cargo.toml"
 ---
 
 # Rust conventions
 
-R1: Use `#[expect]` instead of `#[allow]` when possible.
-R2: Always run `cargo fmt --all` and `cargo clippy --all-targets --all-features`
-    to ensure code quality.
-R3: Avoid absolute paths to items. Either `use` the item itself or its module.
-R4: Enable clippy::arbitrary_source_item_ordering with
-    `source-item-ordering = ["module"]` in clippy.toml, and follow its default
-    grouping: `mod` declarations first, then imports, then statics and
-    consts, then types and impls, then functions. Declaring a module above
-    the `use self::` that imports from it is the point. Use a prefix like
-    `self::` or `crate::` when importing from locally declared modules.
+## R1: prefer-expect-over-allow
 
-    Do not enable the lint's alphabetical half (leave `enum`, `struct`,
-    `trait` and `impl` out of `source-item-ordering`). Alphabetising a
-    protocol enum destroys the spec order that makes it reviewable, an impl
-    stops mirroring its trait, and variant order is the derived `Ord` of a
-    data-carrying enum, so a cosmetic lint could change behaviour.
-R5: Move items into dedicated files in case a file is getting too big.
-R6: Use `cargo nextest` for running tests.
-R7: When using `tracing`, make sure to preserve errors by passing them as
-    `&dyn Error`. Don't use Display (%) formatting! `anyhow::Error` can be done
-    using `&*err`. The benefit of doing it this way is that the visitor can
-    access all the error details. Also consistently use "error" as the key.
+Use `#[expect]` instead of `#[allow]` when possible.
 
-## Module layout convention
+## R2: run-fmt-and-clippy
 
-Use `foo.rs` + `foo/bar.rs`, not `foo/mod.rs`.
+Always run `cargo fmt --all` and `cargo clippy --all-targets --all-features`
+to ensure code quality.
+
+## R3: split-large-files
+
+Move items into dedicated files in case a file is getting too big.
+
+## R4: use-nextest
+
+Use `cargo nextest` for running tests.
+
+## R5: log-errors-as-dyn-error
+
+When using `tracing`, preserve errors by passing them as `&dyn Error`. Don't
+use Display (`%`) formatting! `anyhow::Error` can be done using `&*err`. The
+benefit of doing it this way is that the visitor can access all the error
+details. Also consistently use `error` as the key.
+
+## R6: behaviour-belongs-to-a-type
+
+Don't write freestanding helper functions when a local type can own the
+behaviour. For example, construct error variants through associated functions
+on the error type, not through a free `fn`. Prefer a `From` impl where the
+conversion is natural. A freestanding function is only acceptable when the
+type comes from an external crate.
+
+## R7: newtype-invariants
+
+Encode invariants (ordering, domain validation, ...) with the newtype pattern,
+so that holding a value of the type proves the invariant. Functions then take
+the newtype and neither trust the caller nor check again.
+
+The field is private, the only way to construct the type is a fallible
+constructor (`TryFrom` or `new` returning `Result`), and no API may break the
+invariant after construction.
+
+## R8: structured-errors
+
+Never add a `message: String` field (or similar) that holds a prose
+description of the failure. Model each failure as its own variant and keep the
+underlying error with `#[source]`. Fields that hold data, such as the
+offending key or path, are fine. Don't flatten errors into strings with
+`.to_string()` or `format!`.
