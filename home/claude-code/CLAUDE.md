@@ -19,10 +19,16 @@ can instead be split across multiple files.
 
 ## Commit style
 
-Unless the repository uses a specific convention already, adhere to the following:
-- Use conventional commit messages. Avoid introducing new "scopes". Only use
-  scopes if there's a precedent or if the repository documents (or even
-  validates) which scope exist.
-- Stick to subject-only commits. It's only appropriate to include a body in
-  HIGHLY specific cases. Don't include a body by default and if you think one
-  is needed ask the user.
+There are two commit conventions. Pick the one that fits the repository:
+- Conventional Commits (https://www.conventionalcommits.org/) for
+  repositories that produce releases, such as libraries and binaries.
+- Scoped Commits (https://scopedcommits.com/) for repositories where HEAD
+  itself is the state, such as system configuration or deployments.
+
+The repository defines which convention and which scopes apply. Follow the
+existing history or documentation and don't introduce new scopes without
+precedent. If neither gives a clear answer, ask the user.
+
+Stick to subject-only commits. It's only appropriate to include a body in
+HIGHLY specific cases. Don't include a body by default and if you think one
+is needed ask the user.
