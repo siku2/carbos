@@ -24,6 +24,11 @@
     gh.enable = true;
     gpg.enable = true;
 
+    nh = {
+      enable = true;
+      flake = "/etc/nix-darwin";
+    };
+
     zed-editor = {
       enable = true;
       defaultEditor = true;
