@@ -17,6 +17,8 @@
       "wheel"
       "networkmanager"
       "input"
+      # For the rtprio rlimit, so PipeWire clients go realtime without rtkit.
+      "pipewire"
     ];
     # No password at all. PAM only accepts this where nullok is set, which
     # covers greetd and the lock screen but not sudo or polkit.
