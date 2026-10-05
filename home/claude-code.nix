@@ -45,6 +45,10 @@ in
       skipDangerousModePermissionPrompt = true;
       skipWorkflowUsageWarning = true;
       switchModelsOnFlag = false;
+      voice = {
+        enabled = true;
+        mode = "hold";
+      };
     };
   };
 }
