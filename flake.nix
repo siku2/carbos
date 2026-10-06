@@ -39,18 +39,24 @@
     }@inputs:
     let
       inherit (nixpkgs) lib;
-      system = "x86_64-linux";
-      pkgs = nixpkgs.legacyPackages.${system};
-      treefmtEval = inputs.treefmt-nix.lib.evalModule pkgs ./treefmt.nix;
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+      ];
+      forAllSystems = f: lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
+      treefmt = pkgs: inputs.treefmt-nix.lib.evalModule pkgs ./treefmt.nix;
 
       hosts = builtins.attrNames (builtins.readDir ./hosts);
 
-      installerBundle = {
+      # An installer only carries the hosts of its own platform.
+      installerBundle = system: {
         source = "${self}";
         rev = self.shortRev or self.dirtyShortRev or "unknown";
         hosts = import ./installer/bundle.nix {
           inherit lib;
-          configurations = self.nixosConfigurations;
+          configurations = lib.filterAttrs (
+            _: host: host.config.nixpkgs.hostPlatform.system == system
+          ) self.nixosConfigurations;
         };
       };
     in
@@ -59,7 +65,6 @@
       nixosConfigurations = lib.genAttrs hosts (
         name:
         lib.nixosSystem {
-          inherit system;
           specialArgs = {
             inherit inputs;
           };
@@ -71,32 +76,43 @@
         }
       );
 
-      packages.${system} = {
-        carbos-install = pkgs.callPackage ./installer/package.nix { bundle = installerBundle; };
+      packages = forAllSystems (
+        pkgs:
+        let
+          bundle = installerBundle pkgs.stdenv.hostPlatform.system;
+        in
+        {
+          carbos-install = pkgs.callPackage ./installer/package.nix { inherit bundle; };
 
-        kexec-installer = pkgs.callPackage ./installer/kexec.nix {
-          installer = lib.nixosSystem {
-            modules = [
-              ./installer
-              { carbos.installer.bundle = installerBundle; }
-            ];
+          kexec-installer = pkgs.callPackage ./installer/kexec.nix {
+            installer = lib.nixosSystem {
+              modules = [
+                ./installer
+                {
+                  nixpkgs.hostPlatform = pkgs.stdenv.hostPlatform.system;
+                  carbos.installer.bundle = bundle;
+                }
+              ];
+            };
           };
-        };
-      };
+        }
+      );
 
-      formatter.${system} = treefmtEval.config.build.wrapper;
+      formatter = forAllSystems (pkgs: (treefmt pkgs).config.build.wrapper);
 
-      checks.${system} = {
-        formatting = treefmtEval.config.build.check self;
+      checks = forAllSystems (pkgs: {
+        formatting = (treefmt pkgs).config.build.check self;
         installer = pkgs.testers.runNixOSTest (import ./installer/test.nix { inherit inputs; });
-      };
+      });
 
-      devShells.${system}.default = pkgs.mkShell {
-        packages = [
-          treefmtEval.config.build.wrapper
-          pkgs.nil
-          pkgs.nixd
-        ];
-      };
+      devShells = forAllSystems (pkgs: {
+        default = pkgs.mkShell {
+          packages = [
+            (treefmt pkgs).config.build.wrapper
+            pkgs.nil
+            pkgs.nixd
+          ];
+        };
+      });
     };
 }

@@ -1,11 +1,11 @@
 { inputs }:
-{ lib, ... }:
+{ lib, hostPkgs, ... }:
 let
   target = inputs.nixpkgs.lib.nixosSystem {
-    system = "x86_64-linux";
     modules = [
       inputs.disko.nixosModules.disko
       ./test-host.nix
+      { nixpkgs.hostPlatform = hostPkgs.stdenv.hostPlatform.system; }
     ];
   };
 in

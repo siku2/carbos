@@ -1,11 +1,14 @@
-{ lib, modulesPath, ... }:
+{
+  lib,
+  modulesPath,
+  pkgs,
+  ...
+}:
 {
   imports = [
     (modulesPath + "/installer/netboot/netboot-minimal.nix")
     ./module.nix
   ];
-
-  nixpkgs.hostPlatform = "x86_64-linux";
 
   # The netboot profile adds zfs, which nothing here uses.
   boot.supportedFilesystems.zfs = lib.mkForce false;
@@ -25,7 +28,7 @@
 
   # kexec hands the kernel no EFI framebuffer, so nothing shows until i915
   # binds. Load it in the initrd for a console as early as possible.
-  boot.initrd.kernelModules = [ "i915" ];
+  boot.initrd.kernelModules = lib.optionals pkgs.stdenv.hostPlatform.isx86 [ "i915" ];
 
   hardware.enableRedistributableFirmware = lib.mkForce true;
 
