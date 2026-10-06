@@ -32,6 +32,8 @@
       curl
       disko
       git
+      gptfdisk
+      parted
       nixos-install-tools
       vim
     ])
@@ -60,7 +62,7 @@
 
   users.motd = ''
 
-    Run carbos-install to install carbos on this machine.
+    Run carbos-install [host] to install carbos on this machine.
 
   '';
 
