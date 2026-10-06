@@ -7,8 +7,6 @@
 
   nixpkgs.hostPlatform = "x86_64-linux";
 
-  boot.initrd.systemd.enable = lib.mkForce false;
-
   # The netboot profile adds zfs, which nothing here uses.
   boot.supportedFilesystems.zfs = lib.mkForce false;
 
