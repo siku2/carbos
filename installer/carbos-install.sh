@@ -1,19 +1,53 @@
 # shellcheck shell=bash
+# Single-quoted snippets run in child shells or nix and expand there.
+# shellcheck disable=SC2016
 set -euo pipefail
 
 if [ "$(id -u)" -ne 0 ]; then
   exec sudo carbos-install "$@"
 fi
 
-say() { printf "\n==> %s\n" "$1"; }
+export LOG=/tmp/carbos-install.log
+: >"$LOG"
+rev=$(cat /etc/carbos/rev)
+started=$SECONDS
+steps=(Host Network "Disk plan" "Verify store" Partition Install Done)
+current=0
+target=""
+
+header() {
+  local i
+  clear
+  gum style --border double --border-foreground 6 --padding "0 3" --margin "1 0" \
+    --bold "carbos installer" "$(gum style --foreground 8 "rev $rev$target")"
+  for i in "${!steps[@]}"; do
+    if [ "$i" -lt "$current" ]; then
+      gum style --foreground 2 "  [x] ${steps[$i]}"
+    elif [ "$i" -eq "$current" ]; then
+      gum style --foreground 6 --bold "  [>] ${steps[$i]}"
+    else
+      gum style --foreground 8 "  [ ] ${steps[$i]}"
+    fi
+  done
+  echo
+}
+step() {
+  current=$1
+  header
+}
+info() { gum style --foreground 8 "$*"; }
 die() {
-  printf "ERROR: %s\n" "$1" >&2
+  echo
+  gum style --border normal --border-foreground 1 --foreground 1 --padding "0 1" \
+    "ERROR" "$1" "" "Log: $LOG" "Run carbos-install to start over."
   exit 1
 }
-yes_default() {
-  local answer
-  read -rp "$1 [Yn] " answer
-  [ -z "$answer" ] || [ "$answer" = y ] || [ "$answer" = Y ]
+# Runs a command or exported function behind a spinner, output goes to $LOG.
+run() {
+  local title=$1
+  shift
+  gum spin --spinner line --title "$title" -- bash -c '"$@" >>"$LOG" 2>&1' _ "$@" ||
+    die "$title failed"
 }
 online() { curl -fsS --max-time 5 -o /dev/null https://github.com; }
 settle() {
@@ -25,23 +59,17 @@ settle() {
 # contents to /old/<timestamp>. Every other partition is replaced by an ESP
 # in front of it, so disko's non-destructive format only adds what is missing.
 keep_existing() {
-  local disk=$1 part=$2 num first sector_size esp top old
+  local disk=$1 part=$2 old=$3 num first esp top
   num=$(lsblk -nrpo NAME,PARTN "$disk" | awk -v p="$part" '$1 == p { print $2 }')
   first=$(sgdisk -i "$num" "$disk" | awk '/^First sector:/ { print $3 }')
-  sector_size=$(blockdev --getss "$disk")
-  [ $((first * sector_size)) -ge $((512 * 1024 * 1024)) ] ||
-    die "less than 512M in front of $part, no room for the ESP"
 
-  say "moving the old subvolumes to /old"
   top=$(mktemp -d)
   mount -o subvolid=5 "$part" "$top"
-  old="old/$(date +%Y%m%d-%H%M%S)"
   mkdir -p "$top/$old"
   find "$top" -mindepth 1 -maxdepth 1 ! -name old -exec mv -t "$top/$old" {} +
   umount "$top"
   rmdir "$top"
 
-  say "replacing the other partitions with an ESP"
   for n in $(lsblk -nrpo PARTN "$disk" | grep .); do
     [ "$n" = "$num" ] || sgdisk --delete="$n" "$disk"
   done
@@ -52,82 +80,155 @@ keep_existing() {
   wipefs -a "$esp"
   settle "$disk"
 }
+export -f keep_existing settle
 
-say "carbos installer"
+# Host
 
-say "bringing up network"
+step 0
+mapfile -t hosts < <(jq -r 'keys[]' /etc/carbos/hosts.json)
+host=${1:-}
+if [ -z "$host" ]; then
+  found=()
+  for h in "${hosts[@]}"; do
+    [ -e "$(jq -r --arg h "$h" '.[$h]' /etc/carbos/hosts.json)" ] && found+=("$h")
+  done
+  case ${#found[@]} in
+  1) host=${found[0]} ;;
+  0) host=$(gum choose --header "No known disk found. Pick a host:" "${hosts[@]}") ;;
+  *) host=$(gum choose --header "Several known disks found. Pick a host:" "${found[@]}") ;;
+  esac
+fi
+jq -e --arg h "$host" 'has($h)' /etc/carbos/hosts.json >/dev/null || die "unknown host $host"
+disk=$(realpath "$(jq -r --arg h "$host" '.[$h]' /etc/carbos/hosts.json)")
+[ -b "$disk" ] || die "disk $disk for $host not found"
+target="  $host on $disk"
+
+rm -rf /root/carbos
+cp -r --no-preserve=mode "$(readlink -f /etc/carbos/source)" /root/carbos
+flake="/root/carbos#nixosConfigurations.$host"
+
+# Network
+
+step 1
 modprobe iwlwifi 2>/dev/null || true
 rfkill unblock all 2>/dev/null || true
-
 if ! online; then
   if nmcli -t -f TYPE device 2>/dev/null | grep -qx wifi; then
-    echo "wifi device present but offline"
-    if yes_default "Open nmtui to configure wifi?"; then
+    if gum confirm "Offline. Open nmtui to configure wifi?"; then
       nmtui
     fi
   else
-    echo "no wifi device (on carbon-x1 this is the CNVi quirk after kexec)"
-    read -rp "Connect ethernet or USB tethering, then press Enter..." _
+    info "No wifi device (on carbon-x1 this is the CNVi quirk after kexec)."
+    gum confirm --affirmative Continue --negative Abort \
+      "Connect ethernet or USB tethering, then continue." || die "aborted"
   fi
-  for _ in 1 2 3 4 5 6 7 8 9 10; do
-    online && break
-    sleep 3
-  done
-  online || die "no network, fix it and run carbos-install again"
+  gum spin --spinner line --title "Waiting for the network" -- bash -c \
+    'for _ in $(seq 20); do curl -fsS --max-time 5 -o /dev/null https://github.com && exit 0; sleep 3; done; exit 1' ||
+    die "no network"
 fi
-say "network is up"
 
-say "fetching carbos"
-rm -rf /root/carbos
-git clone https://github.com/siku2/carbos.git /root/carbos
+# Disk plan
 
-mapfile -t hosts < <(ls /root/carbos/hosts)
-host=${1:-}
-if [ -z "$host" ]; then
-  echo "hosts: ${hosts[*]}"
-  read -rp "Host to install: " host
-fi
-printf '%s\n' "${hosts[@]}" | grep -qx "$host" || die "unknown host $host"
-flake="/root/carbos#$host"
-
-disk=$(realpath "$(nix eval --raw "/root/carbos#nixosConfigurations.$host.config.disko.devices.disk.main.device")")
-[ -b "$disk" ] || die "disk $disk not found"
-say "target disk is $disk"
-lsblk -o NAME,FSTYPE,LABEL,SIZE "$disk"
-
+step 2
 part=$(lsblk -nrpo NAME,TYPE,FSTYPE "$disk" | awk '$2 == "part" && $3 == "btrfs" { print $1 }')
 mode=wipe
 if [ "$(printf '%s' "$part" | grep -c .)" -eq 1 ]; then
-  echo
-  echo "$part holds a btrfs filesystem."
-  if yes_default "Keep its data under /old instead of wiping the disk?"; then
-    mode=keep
+  choice=$(gum choose --header "$part holds a btrfs filesystem. What should happen to it?" \
+    "Keep its data under /old" "Wipe the whole disk")
+  [ "$choice" = "Wipe the whole disk" ] || mode=keep
+fi
+
+old="old/$(date +%Y%m%d-%H%M%S)"
+if [ "$mode" = keep ]; then
+  num=$(lsblk -nrpo NAME,PARTN "$disk" | awk -v p="$part" '$1 == p { print $2 }')
+  first=$(sgdisk -i "$num" "$disk" | awk '/^First sector:/ { print $3 }')
+  esp_bytes=$((first * $(blockdev --getss "$disk")))
+  [ "$esp_bytes" -ge $((512 * 1024 * 1024)) ] ||
+    die "less than 512M in front of $part, no room for the ESP"
+fi
+
+layout=$(gum spin --spinner line --show-output --title "Reading the $host disk layout" -- \
+  nix eval --raw "$flake.config.disko.devices.disk.main.content.partitions" --apply '
+    ps: builtins.concatStringsSep "\n" (map (p:
+      "${p.name}|${p.size}|${p.content.format or p.content.type}|"
+      + builtins.concatStringsSep " " (map (s: s.mountpoint)
+        (builtins.attrValues (p.content.subvolumes or { }))))
+      (builtins.sort (a: b: a.priority < b.priority) (builtins.attrValues ps)))') ||
+  die "could not evaluate the disk layout of $host"
+
+now=$(lsblk -o NAME,FSTYPE,LABEL,SIZE "$disk")
+after=""
+n=0
+while IFS='|' read -r name size fs subvols; do
+  n=$((n + 1))
+  if [ "$mode" = keep ] && [ "$fs" = btrfs ]; then
+    size="$(lsblk -dno SIZE "$part" | tr -d ' ') kept"
+  elif [ "$mode" = keep ]; then
+    size="$(numfmt --to=iec "$esp_bytes") new"
   fi
-fi
-
-echo
+  after+=$(printf "p%-3s%-8s%-7s%s" "$n" "$name" "$fs" "$size")$'\n'
+  [ -z "$subvols" ] || after+="    $subvols"$'\n'
+done <<<"$layout"
 if [ "$mode" = keep ]; then
-  echo "About to move everything on $part to /old and ERASE all other partitions."
-  read -rp "Type KEEP to continue: " answer
-  [ "$answer" = KEEP ] || die "aborted"
-  keep_existing "$disk" "$part"
-  say "partitioning (disko, keeping data)"
-  disko --mode format,mount --flake "$flake"
+  after+=$'\n'"old data -> /$old"
 else
-  echo "About to DESTROY $disk and install carbos."
-  read -rp "Type WIPE to continue: " answer
-  [ "$answer" = WIPE ] || die "aborted"
-  say "partitioning (disko)"
-  disko --mode destroy,format,mount --flake "$flake"
+  after+=$'\n'"everything else is erased"
 fi
 
-say "installing carbos"
-nixos-install --flake "$flake" --no-root-passwd
+gum join --horizontal \
+  "$(gum style --border normal --padding "0 1" --margin "0 2 0 0" "$(gum style --bold Now)" "" "$now")" \
+  "$(gum style --border normal --border-foreground 6 --padding "0 1" "$(gum style --bold "After ($mode)")" "" "${after%$'\n'}")"
+echo
 
-say "install complete"
+word=$([ "$mode" = keep ] && echo KEEP || echo WIPE)
+answer=$(gum input --placeholder "Type $word to install $host on $disk")
+[ "$answer" = "$word" ] || die "aborted"
+
+# Verify store
+
+step 3
+gum spin --spinner line --title "Hashing every path of the bundled store" -- bash -c '
+  while :; do
+    case $(systemctl show -P ActiveState carbos-verify) in
+    active | failed) exit 0 ;;
+    esac
+    sleep 1
+  done'
+[ "$(systemctl show -P ActiveState carbos-verify)" = active ] ||
+  die "the bundled store is corrupt in memory, see journalctl -u carbos-verify"
+
+# Partition
+
+step 4
 if [ "$mode" = keep ]; then
-  echo "Old data is in /old on the btrfs top level. Mount it with -o subvolid=5."
+  run "Moving old data to /$old" keep_existing "$disk" "$part" "$old"
+  run "Partitioning with disko" disko --mode format,mount --flake "/root/carbos#$host"
+else
+  run "Partitioning with disko" disko --mode destroy,format,mount --yes-wipe-all-disks \
+    --flake "/root/carbos#$host"
 fi
-if yes_default "Reboot into carbos?"; then
+
+# Install
+
+step 5
+nix build --store /mnt --out-link /tmp/system --log-format internal-json -v \
+  "$flake.config.system.build.toplevel" |& nom --json || die "building $host failed"
+run "Installing the bootloader" \
+  nixos-install --system "$(readlink /tmp/system)" --no-root-passwd --no-channel-copy
+
+# Done
+
+step 6
+elapsed=$((SECONDS - started))
+summary=("Host: $host" "Disk: $disk" "Mode: $mode" "Rev:  $rev"
+  "Time: $((elapsed / 60))m $((elapsed % 60))s")
+if [ "$mode" = keep ]; then
+  summary+=("" "Old data is in /$old on the btrfs top level:"
+    "  mount -o subvolid=5 /dev/disk/by-partlabel/disk-main-carbos /mnt")
+fi
+gum style --border double --border-foreground 2 --padding "0 2" \
+  "$(gum style --bold --foreground 2 "carbos is installed")" "" "${summary[@]}"
+echo
+if gum confirm "Reboot into carbos?"; then
   reboot
 fi

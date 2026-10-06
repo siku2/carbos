@@ -41,6 +41,9 @@
       disko
       git
       gptfdisk
+      gum
+      jq
+      nix-output-monitor
       parted
       nixos-install-tools
       vim
