@@ -70,10 +70,10 @@
     };
   };
 
-  users.motd = ''
-
-    Run carbos-install [host] to install carbos on this machine.
-
+  programs.bash.loginShellInit = ''
+    if [ "$(tty)" = /dev/tty1 ]; then
+      carbos-install
+    fi
   '';
 
   system.stateVersion = "26.05";
