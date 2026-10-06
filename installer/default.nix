@@ -1,4 +1,5 @@
 {
+  bundle,
   config,
   lib,
   pkgs,
@@ -41,6 +42,13 @@
       (pkgs.writeShellScriptBin "carbos-install" (builtins.readFile ./carbos-install.sh))
     ];
 
+  environment.etc = {
+    "carbos/hosts.json".text = builtins.toJSON bundle.hosts;
+    "carbos/rev".text = bundle.rev;
+    "carbos/source".source = bundle.source;
+  };
+
+  # carbos-install waits for this before it touches the disk.
   systemd.services.carbos-verify = {
     description = "Verify integrity of the bundled Nix store";
     after = [ "register-nix-paths.service" ];

@@ -70,6 +70,11 @@
       packages.${system}.kexec-installer = inputs.nixos-generators.nixosGenerate {
         inherit system;
         format = "kexec-bundle";
+        specialArgs.bundle = {
+          source = self;
+          rev = self.shortRev or self.dirtyShortRev or "unknown";
+          hosts = lib.mapAttrs (_: host: host.config.disko.devices.disk.main.device) self.nixosConfigurations;
+        };
         modules = [
           inputs.disko.nixosModules.disko
           ./installer
