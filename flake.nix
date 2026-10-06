@@ -49,6 +49,15 @@
       treefmtEval = inputs.treefmt-nix.lib.evalModule pkgs ./treefmt.nix;
 
       hosts = builtins.attrNames (builtins.readDir ./hosts);
+
+      installerBundle = {
+        source = "${self}";
+        rev = self.shortRev or self.dirtyShortRev or "unknown";
+        hosts = import ./installer/bundle.nix {
+          inherit lib;
+          configurations = self.nixosConfigurations;
+        };
+      };
     in
     {
       # Each host pulls in whatever extra modules it needs itself.
@@ -67,18 +76,17 @@
         }
       );
 
-      packages.${system}.kexec-installer = inputs.nixos-generators.nixosGenerate {
-        inherit system;
-        format = "kexec-bundle";
-        specialArgs.bundle = {
-          source = self;
-          rev = self.shortRev or self.dirtyShortRev or "unknown";
-          hosts = lib.mapAttrs (_: host: host.config.disko.devices.disk.main.device) self.nixosConfigurations;
+      packages.${system} = {
+        carbos-install = pkgs.callPackage ./installer/package.nix { bundle = installerBundle; };
+
+        kexec-installer = inputs.nixos-generators.nixosGenerate {
+          inherit system;
+          format = "kexec-bundle";
+          modules = [
+            ./installer
+            { carbos.installer.bundle = installerBundle; }
+          ];
         };
-        modules = [
-          inputs.disko.nixosModules.disko
-          ./installer
-        ];
       };
 
       formatter.${system} = treefmtEval.config.build.wrapper;
