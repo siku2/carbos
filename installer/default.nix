@@ -1,8 +1,18 @@
-{ lib, ... }:
+{ lib, modulesPath, ... }:
 {
-  imports = [ ./module.nix ];
+  imports = [
+    (modulesPath + "/installer/netboot/netboot-minimal.nix")
+    ./module.nix
+  ];
+
+  nixpkgs.hostPlatform = "x86_64-linux";
 
   boot.initrd.systemd.enable = lib.mkForce false;
+
+  boot.loader = {
+    grub.enable = lib.mkForce false;
+    systemd-boot.enable = lib.mkForce false;
+  };
 
   boot.kernelParams = lib.mkForce [
     "console=ttyS0,115200"

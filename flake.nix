@@ -25,11 +25,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    nixos-generators = {
-      url = "github:nix-community/nixos-generators";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
     treefmt-nix = {
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -79,13 +74,13 @@
       packages.${system} = {
         carbos-install = pkgs.callPackage ./installer/package.nix { bundle = installerBundle; };
 
-        kexec-installer = inputs.nixos-generators.nixosGenerate {
-          inherit system;
-          format = "kexec-bundle";
-          modules = [
-            ./installer
-            { carbos.installer.bundle = installerBundle; }
-          ];
+        kexec-installer = pkgs.callPackage ./installer/kexec.nix {
+          installer = lib.nixosSystem {
+            modules = [
+              ./installer
+              { carbos.installer.bundle = installerBundle; }
+            ];
+          };
         };
       };
 
