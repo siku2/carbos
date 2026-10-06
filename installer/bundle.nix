@@ -1,5 +1,3 @@
-# What carbos-install knows about each host, computed from its configuration
-# so the installer never has to evaluate a flake to plan or partition.
 {
   lib,
   configurations,

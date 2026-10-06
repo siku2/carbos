@@ -1,5 +1,3 @@
-# The installer system without anything specific to how it boots, so the VM
-# test runs the same setup as the kexec image.
 {
   config,
   lib,
