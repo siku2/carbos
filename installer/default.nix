@@ -47,17 +47,9 @@
     wantedBy = [ "multi-user.target" ];
     serviceConfig = {
       Type = "oneshot";
-      StandardOutput = "journal+console";
-      StandardError = "journal+console";
+      RemainAfterExit = true;
+      ExecStart = "${lib.getExe' config.nix.package "nix-store"} --verify --check-contents";
     };
-    script = ''
-      echo "carbos-verify: hashing every store path, this takes a minute"
-      if ${lib.getExe' config.nix.package "nix-store"} --verify --check-contents; then
-        echo "carbos-verify: PASS - store is intact"
-      else
-        echo "carbos-verify: FAIL - store is corrupt in memory"
-      fi
-    '';
   };
 
   users.motd = ''
