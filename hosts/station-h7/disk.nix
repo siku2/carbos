@@ -1,6 +1,7 @@
 { config, ... }:
 let
   device = "/dev/disk/by-id/nvme-eui.0025384231407851";
+  home = "/home/${config.carbos.user.login}";
 in
 {
   disko.devices = {
@@ -50,6 +51,13 @@ in
                     "noatime"
                   ];
                 };
+                "/projects" = {
+                  mountpoint = "${home}/Projects";
+                  mountOptions = [
+                    "compress=zstd"
+                    "noatime"
+                  ];
+                };
                 # Already compressed, so zstd only costs cpu. Split from
                 # /home, but compatdata's wine prefixes are game state.
                 "/games" = {
@@ -69,5 +77,6 @@ in
 
   systemd.tmpfiles.rules = [
     "d /games 0755 ${config.carbos.user.login} users -"
+    "d ${home}/Projects 0755 ${config.carbos.user.login} users -"
   ];
 }
