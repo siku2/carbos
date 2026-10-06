@@ -11,6 +11,7 @@
   boot.kernelParams = lib.mkForce [
     "console=ttyS0,115200"
     "console=tty0"
+    "loglevel=3"
     "panic=30"
     "boot.panic_on_fail"
   ];
@@ -20,6 +21,12 @@
   boot.initrd.kernelModules = [ "i915" ];
 
   hardware.enableRedistributableFirmware = lib.mkForce true;
+
+  console = {
+    earlySetup = true;
+    font = "ter-v24n";
+    packages = [ pkgs.terminus_font ];
+  };
 
   networking.hostName = "carbos-installer";
 
