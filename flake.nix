@@ -91,7 +91,10 @@
 
       formatter.${system} = treefmtEval.config.build.wrapper;
 
-      checks.${system}.formatting = treefmtEval.config.build.check self;
+      checks.${system} = {
+        formatting = treefmtEval.config.build.check self;
+        installer = pkgs.testers.runNixOSTest (import ./installer/test.nix { inherit inputs; });
+      };
 
       devShells.${system}.default = pkgs.mkShell {
         packages = [
