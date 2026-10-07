@@ -6,6 +6,7 @@
   curl,
   findutils,
   gawk,
+  git,
   gptfdisk,
   gum,
   jq,
@@ -22,6 +23,7 @@ writeShellApplication {
     curl
     findutils
     gawk
+    git
     gptfdisk
     gum
     jq

@@ -18,7 +18,8 @@ in
       imports = [ ./module.nix ];
 
       carbos.installer.bundle = {
-        source = "unused-with-a-prebuilt-system";
+        # Offline, so the installer copies this instead of cloning the repo.
+        source = "${pkgs.writeTextDir "flake.nix" "{ }"}";
         rev = "test";
         hosts = import ./bundle.nix {
           inherit lib;
@@ -67,6 +68,7 @@ in
         machine.succeed("carbos-install --unattended --mode wipe 2>&1")
         machine.succeed("test -e /mnt/nix/var/nix/profiles/system")
         machine.succeed("test -e /mnt/boot/EFI/systemd/systemd-bootx64.efi")
+        machine.succeed("test -w /mnt/etc/nixos/flake.nix")
         machine.succeed("lsblk -nro PARTLABEL /dev/vdb | grep -x disk-main-carbos")
         machine.succeed("umount -R /mnt")
 

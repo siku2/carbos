@@ -57,7 +57,7 @@ if [ -z "$OPT_DRY_RUN" ] && [ "$(id -u)" -ne 0 ]; then
   exec sudo "$0" "${ARGS[@]}"
 fi
 
-STEPS=(host network plan verify partition install finish)
+STEPS=(host network plan verify partition install repo finish)
 DRY_RUN_STEPS=(host plan)
 declare -A LABELS=(
   [host]=Host
@@ -66,6 +66,7 @@ declare -A LABELS=(
   [verify]="Verify store"
   [partition]=Partition
   [install]=Install
+  [repo]=Repository
   [finish]=Done
 )
 

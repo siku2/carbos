@@ -51,6 +51,7 @@
       # An installer only carries the hosts of its own platform.
       installerBundle = system: {
         source = "${self}";
+        repo = "https://github.com/siku2/carbos.git";
         rev = self.shortRev or self.dirtyShortRev or "unknown";
         hosts = import ./installer/bundle.nix {
           inherit lib;

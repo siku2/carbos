@@ -21,6 +21,9 @@ lib.mapAttrs (
     }) partitions;
     formatMount = lib.getExe' build.formatMount "disko-format-mount";
     destroyFormatMount = lib.getExe' build.destroyFormatMount "disko-destroy-format-mount";
+    login = host.config.carbos.user.login or null;
+    substituters = host.config.nix.settings.substituters;
+    trustedPublicKeys = host.config.nix.settings.trusted-public-keys;
   }
   # Lets the installer work offline, at the cost of carrying the whole system.
   // lib.optionalAttrs prebuilt { system = build.toplevel; }

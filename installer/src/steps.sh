@@ -133,17 +133,72 @@ step_partition() {
   fi
 }
 
+# cache_check OUT FLAKE NIX_FLAG...
+#
+# Writes the packages that no cache provides to OUT, one name per line.
+# Config glue has no pname and downloads have an outputHash, so both are
+# left out. The dry run also puts every derivation into the installer store.
+cache_check() {
+  local out=$1 drvs
+  shift
+  mapfile -t drvs < <(nix build --dry-run "$@" 2>&1 | tee -a "$LOG" |
+    awk '/will be built:/ { f = 1; next } /^  / { if (f) print $1; next } { f = 0 }')
+  : >"$out"
+  [ ${#drvs[@]} -gt 0 ] || return 0
+  nix derivation show "${drvs[@]}" | jq -r '
+    (.derivations // .) | to_entries[]
+    | ((.value.structuredAttrs // {}) + .value.env) as $attrs
+    | select($attrs.pname != null and $attrs.outputHash == null)
+    | .key' | sed 's/^[a-z0-9]\{32\}-//; s/\.drv$//' | sort -u >"$out"
+}
+
 step_install() {
-  local host=${PLAN[host]} system
+  local host=${PLAN[host]} system flake subs keys missing pkgs
   system=$(host_get "$host" system)
   if [ -z "$system" ]; then
-    ui_nix_build --store /mnt --extra-substituters 'auto?trusted=1' --out-link /tmp/carbos-system \
-      "path:$(bundle_get .source)#nixosConfigurations.$host.config.system.build.toplevel" ||
+    flake="path:$(bundle_get .source)#nixosConfigurations.$host.config.system.build.toplevel"
+    subs=$(host_get "$host" 'substituters | join(" ")')
+    keys=$(host_get "$host" 'trustedPublicKeys | join(" ")')
+    missing=$(mktemp)
+    ui_spin "Asking the caches of $host what is missing" cache_check "$missing" "$flake" \
+      --extra-substituters "$subs" --extra-trusted-public-keys "$keys"
+    if [ -s "$missing" ]; then
+      mapfile -t pkgs <"$missing"
+      ui_box 3 "${#pkgs[@]} packages are in no cache and will be compiled" "${pkgs[@]}"
+      echo
+      if ui_interactive; then
+        ui_confirm "Compile them?" || ui_die "aborted"
+      fi
+    fi
+    # The derivations stay in the installer store, where nix-output-monitor
+    # reads them. Only the outputs go to /mnt.
+    ui_nix_build --store /mnt --eval-store auto --out-link /tmp/carbos-system \
+      --extra-substituters "auto?trusted=1 $subs" --extra-trusted-public-keys "$keys" "$flake" ||
       ui_die "building $host failed"
     system=$(readlink /tmp/carbos-system)
   fi
   ui_spin "Installing the system" \
     nixos-install --system "$system" --no-root-passwd --no-channel-copy
+}
+
+repo_fetch() {
+  local repo dest=/mnt/etc/nixos
+  repo=$(bundle_get .repo)
+  rm -rf "$dest"
+  if [ -n "$repo" ] && online && git clone "$repo" "$dest"; then
+    return
+  fi
+  echo "cloning failed, copying the bundled source instead"
+  cp -r "$(bundle_get .source)" "$dest"
+  chmod -R u+w "$dest"
+}
+
+step_repo() {
+  local login id
+  ui_spin "Cloning the repository to /etc/nixos" repo_fetch
+  login=$(host_get "${PLAN[host]}" login)
+  id=$(awk -F: -v u="$login" '$1 == u { print $3 ":" $4 }' /mnt/etc/passwd)
+  [ -z "$id" ] || chown -R "$id" /mnt/etc/nixos
 }
 
 step_finish() {
