@@ -17,10 +17,13 @@
     auto-optimise-store = true;
   };
 
-  nix.gc = {
-    automatic = true;
-    dates = "weekly";
-    options = "--delete-older-than 30d";
+  programs.nh = {
+    enable = true;
+    clean = {
+      enable = true;
+      dates = "weekly";
+      extraArgs = "--keep-since 30d";
+    };
   };
 
   time.timeZone = "Europe/Zurich";
@@ -40,9 +43,8 @@
 
   services.resolved.enable = true;
 
-  # nixos-rebuild resolves this symlink and uses its parent as the flake root.
   systemd.tmpfiles.rules = [
-    "L+ /etc/nixos/flake.nix - - - - /home/${config.carbos.user.login}/Projects/carbos/flake.nix"
+    "d /etc/nixos 0755 ${config.carbos.user.login} users -"
   ];
 
   services.pipewire = {
