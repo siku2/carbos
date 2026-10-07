@@ -18,10 +18,10 @@
     systemd-boot.enable = lib.mkForce false;
   };
 
-  boot.kernelParams = lib.mkForce [
+  boot.consoleLogLevel = 3;
+  boot.kernelParams = [
     "console=ttyS0,115200"
     "console=tty0"
-    "loglevel=3"
     "panic=30"
     "boot.panic_on_fail"
   ];
