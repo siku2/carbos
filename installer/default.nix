@@ -26,11 +26,15 @@
     "boot.panic_on_fail"
   ];
 
-  # kexec hands the kernel no EFI framebuffer, so nothing shows until i915
-  # binds. Load it in the initrd for a console as early as possible.
-  boot.initrd.kernelModules = lib.optionals pkgs.stdenv.hostPlatform.isx86 [ "i915" ];
+  boot.initrd.kernelModules = [
+    "amdgpu"
+  ]
+  ++ lib.optionals pkgs.stdenv.hostPlatform.isx86 [ "i915" ];
 
   hardware.enableRedistributableFirmware = lib.mkForce true;
+
+  services.openssh.settings.PermitEmptyPasswords = true;
+  security.pam.services.sshd.allowNullPassword = true;
 
   networking.hostName = "carbos-installer";
 
