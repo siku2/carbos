@@ -10,6 +10,22 @@ let
   attrs = "/sys/class/firmware-attributes/thinklmi/attributes";
 in
 {
+  options.carbos.thinkpad = {
+    biosSettings = lib.mkOption {
+      type = lib.types.attrsOf lib.types.str;
+      default = { };
+      example = {
+        AdaptiveThermalManagementAC = "MaximizePerformance";
+      };
+    };
+
+    batteryChargeLimit = lib.mkOption {
+      type = lib.types.nullOr (lib.types.ints.between 1 100);
+      default = null;
+      description = "Cap charging at the given percentage via udev to spare the battery.";
+    };
+  };
+
   config = {
     services.udev.extraRules = lib.mkIf (batteryChargeLimit != null) ''
       ACTION=="add|change", SUBSYSTEM=="power_supply", KERNEL=="BAT*", ATTR{charge_control_end_threshold}="${toString batteryChargeLimit}"

@@ -5,22 +5,6 @@
 }:
 {
   options.carbos = {
-    thinkpad = {
-      biosSettings = lib.mkOption {
-        type = lib.types.attrsOf lib.types.str;
-        default = { };
-        example = {
-          AdaptiveThermalManagementAC = "MaximizePerformance";
-        };
-      };
-
-      batteryChargeLimit = lib.mkOption {
-        type = lib.types.nullOr (lib.types.ints.between 1 100);
-        default = null;
-        description = "Cap charging at the given percentage via udev to spare the battery.";
-      };
-    };
-
     user = {
       login = lib.mkOption {
         type = lib.types.str;
