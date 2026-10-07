@@ -1,4 +1,4 @@
-{ lib, ... }:
+{ lib, pkgs, ... }:
 let
   # -80.01 dB is LSP's "off" for a routing slot.
   off = -80.01;
@@ -40,7 +40,6 @@ in
 {
   services.easyeffects = {
     enable = true;
-    preset = "mic";
 
     extraPresets.mic.input = {
       blocklist = [ ];
@@ -129,4 +128,17 @@ in
       };
     };
   };
+
+  # --load-preset only reaches an instance that is already running, so passing
+  # it at service start does nothing. The fallback preset loads whenever the
+  # input device is set, startup included.
+  home.activation.easyeffectsFallbackPreset = lib.hm.dag.entryAfter [ "writeBoundary" ] (
+    let
+      write = "run ${pkgs.kdePackages.kconfig}/bin/kwriteconfig6 --file easyeffects/db/easyeffectsrc --group Window";
+    in
+    ''
+      ${write} --key inputAutoloadingUsesFallback --type bool true
+      ${write} --key inputAutoloadingFallbackPreset mic
+    ''
+  );
 }
