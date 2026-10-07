@@ -11,31 +11,6 @@ let
     sidechain-to-input = off;
     sidechain-to-link = off;
   };
-
-  # Shared by the two LSP dynamics plugins, so only the tuned values appear below.
-  dynamics = routing // {
-    attack = 20.0;
-    bypass = false;
-    dry = off;
-    hpf-frequency = 10.0;
-    hpf-mode = "Off";
-    input-gain = 0.0;
-    lpf-frequency = 20000.0;
-    lpf-mode = "Off";
-    makeup = 0.0;
-    output-gain = 0.0;
-    release = 100.0;
-    stereo-split = false;
-    wet = 0.0;
-    sidechain = {
-      lookahead = 0.0;
-      mode = "Peak";
-      preamp = 0.0;
-      reactivity = 10.0;
-      source = "Middle";
-      stereo-split-source = "Left/Right";
-    };
-  };
 in
 {
   services.easyeffects = {
@@ -45,64 +20,105 @@ in
       blocklist = [ ];
 
       plugins_order = [
-        "echo_canceller#0"
-        "rnnoise#0"
+        "filter#0"
+        "deepfilternet#0"
         "gate#0"
-        "compressor#1"
+        "compressor#0"
         "limiter#0"
       ];
 
-      "echo_canceller#0" = {
+      # Highway and fan rumble.
+      "filter#0" = {
+        balance = 0.0;
         bypass = false;
+        equal-mode = "IIR";
+        frequency = 100.0;
+        gain = 0.0;
         input-gain = 0.0;
+        mode = "RLC (BT)";
         output-gain = 0.0;
-        echo-canceller = {
-          automatic-gain-control = false;
-          enable = true;
-          enforce-high-pass = false;
-          mobile-mode = false;
-        };
-        high-pass = {
-          enable = false;
-          full-band = false;
-        };
-        noise-suppression = {
-          enable = false;
-          level = "Moderate";
-        };
+        quality = 0.0;
+        slope = "x2";
+        type = "High-pass";
+        width = 4.0;
       };
 
-      "rnnoise#0" = {
+      "deepfilternet#0" = {
+        attenuation-limit = 25.0;
         bypass = false;
-        enable-vad = true;
         input-gain = 0.0;
-        model-name = ''""'';
+        max-df-processing-threshold = 20.0;
+        max-erb-processing-threshold = 30.0;
+        min-processing-buffer = 0;
+        min-processing-threshold = -15.0;
         output-gain = 0.0;
-        release = 20.0;
-        use-standard-model = true;
-        vad-thres = 50.0;
-        wet = 0.0;
+        post-filter-beta = 0.0;
       };
 
-      "gate#0" = lib.recursiveUpdate dynamics {
-        curve-threshold = -30.0;
+      # Soft expander that lowers what DeepFilterNet leaves of the room by 12 dB.
+      # The raw room sits at -55 dBFS and the quietest speech at about -42.
+      "gate#0" = routing // {
+        attack = 2.0;
+        bypass = false;
+        curve-threshold = -52.0;
         curve-zone = -6.0;
-        hysteresis = false;
-        hysteresis-threshold = -12.0;
-        hysteresis-zone = -6.0;
-        reduction = -24.0;
-        sidechain.type = "Internal";
+        dry = off;
+        hpf-frequency = 10.0;
+        hpf-mode = "Off";
+        hysteresis = true;
+        hysteresis-threshold = -3.0;
+        hysteresis-zone = -3.0;
+        input-gain = 0.0;
+        lpf-frequency = 20000.0;
+        lpf-mode = "Off";
+        makeup = 0.0;
+        output-gain = 0.0;
+        reduction = -12.0;
+        release = 200.0;
+        stereo-split = false;
+        wet = 0.0;
+        sidechain = {
+          lookahead = 5.0;
+          mode = "RMS";
+          preamp = 0.0;
+          reactivity = 10.0;
+          source = "Middle";
+          stereo-split-source = "Left/Right";
+          type = "Internal";
+        };
       };
 
-      "compressor#1" = lib.recursiveUpdate dynamics {
+      # Speech sits at about -26 dBFS RMS with the gain maxed. This lifts it to -20.
+      "compressor#0" = routing // {
+        attack = 10.0;
         boost-amount = 6.0;
         boost-threshold = -72.0;
+        bypass = false;
+        dry = off;
+        hpf-frequency = 10.0;
+        hpf-mode = "Off";
+        input-gain = 0.0;
         knee = -6.0;
+        lpf-frequency = 20000.0;
+        lpf-mode = "Off";
+        makeup = 14.0;
         mode = "Downward";
-        ratio = 4.0;
+        output-gain = 0.0;
+        ratio = 3.0;
+        release = 120.0;
         release-threshold = off;
-        threshold = -12.0;
-        sidechain.type = "Feed-forward";
+        stereo-split = false;
+        threshold = -26.0;
+        wet = 0.0;
+        sidechain = {
+          lookahead = 0.0;
+          mode = "RMS";
+          preamp = 0.0;
+          reactivity = 10.0;
+          source = "Middle";
+          stereo-split-source = "Left/Right";
+          type = "Feed-forward";
+        };
       };
 
       "limiter#0" = routing // {
@@ -114,7 +130,7 @@ in
         attack = 5.0;
         bypass = false;
         dithering = "None";
-        gain-boost = true;
+        gain-boost = false;
         input-gain = 0.0;
         lookahead = 5.0;
         mode = "Herm Thin";
@@ -124,7 +140,7 @@ in
         sidechain-preamp = 0.0;
         sidechain-type = "Internal";
         stereo-link = 100.0;
-        threshold = 0.0;
+        threshold = -1.0;
       };
     };
   };
@@ -132,13 +148,14 @@ in
   # --load-preset only reaches an instance that is already running, so passing
   # it at service start does nothing. The fallback preset loads whenever the
   # input device is set, startup included.
-  home.activation.easyeffectsFallbackPreset = lib.hm.dag.entryAfter [ "writeBoundary" ] (
+  home.activation.easyeffectsSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] (
     let
-      write = "run ${pkgs.kdePackages.kconfig}/bin/kwriteconfig6 --file easyeffects/db/easyeffectsrc --group Window";
+      write = "run ${pkgs.kdePackages.kconfig}/bin/kwriteconfig6 --file easyeffects/db/easyeffectsrc";
     in
     ''
-      ${write} --key inputAutoloadingUsesFallback --type bool true
-      ${write} --key inputAutoloadingFallbackPreset mic
+      ${write} --group Window --key inputAutoloadingUsesFallback --type bool true
+      ${write} --group Window --key inputAutoloadingFallbackPreset mic
+      ${write} --group StreamInputs --key listenToMic --type bool false
     ''
   );
 }
