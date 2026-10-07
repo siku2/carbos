@@ -59,6 +59,12 @@ in
     ];
   };
 
+  xdg.configFile."secretspec/config.toml".source =
+    (pkgs.formats.toml { }).generate "secretspec-config.toml"
+      {
+        defaults.provider = "keyring";
+      };
+
   # Generating it pulls in an options.json derivation that nix warns about.
   manual.manpages.enable = false;
 
