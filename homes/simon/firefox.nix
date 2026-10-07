@@ -63,6 +63,21 @@ in
         } catch (e) {
           Components.utils.reportError(e);
         }
+
+        // Ctrl-click is hard-coded to open a tab and the policy rejects the
+        // middlemouse prefix. Rewriting the decision covers links, bookmarks
+        // and the URL bar alike.
+        defaultPref("middlemouse.openNewWindow", true);
+        try {
+          const { BrowserUtils } = ChromeUtils.importESModule("resource://gre/modules/BrowserUtils.sys.mjs");
+          const whereToOpenLink = BrowserUtils.whereToOpenLink;
+          BrowserUtils.whereToOpenLink = function (...args) {
+            const where = whereToOpenLink.apply(this, args);
+            return where === "tab" || where === "tabshifted" ? "window" : where;
+          };
+        } catch (e) {
+          Components.utils.reportError(e);
+        }
       '';
     };
 
@@ -110,6 +125,10 @@ in
         # window features are unaffected by open_newwindow.restriction = 2.
         "browser.link.open_newwindow" = {
           Value = 2;
+          Status = "default";
+        };
+        "browser.tabs.opentabfor.middleclick" = {
+          Value = false;
           Status = "default";
         };
         "dom.ipc.processCount" = {
