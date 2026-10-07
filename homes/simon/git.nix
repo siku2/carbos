@@ -27,6 +27,7 @@ in
         signingkey = "key::${signingKey}";
       };
       init.defaultBranch = "main";
+      pull.ff = "only";
       commit.gpgsign = true;
       tag.gpgsign = true;
       gpg.format = "ssh";
