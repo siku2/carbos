@@ -124,7 +124,21 @@ in
           Value = 2;
           Status = "default";
         };
+        "browser.newtabpage.activity-stream.showWeather" = {
+          Value = false;
+          Status = "default";
+        };
       };
+
+      FirefoxHome = {
+        SponsoredTopSites = false;
+        SponsoredPocket = false;
+        SponsoredStories = false;
+        Locked = false;
+      };
+      FirefoxSuggest.SponsoredSuggestions = false;
+
+      PasswordManagerEnabled = false;
 
       DisableFirefoxStudies = true;
       DisablePocket = true;
