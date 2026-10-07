@@ -28,8 +28,36 @@ in
       };
       init.defaultBranch = "main";
       pull.ff = "only";
-      commit.gpgsign = true;
-      tag.gpgsign = true;
+      fetch.prune = true;
+      push = {
+        autoSetupRemote = true;
+        useForceIfIncludes = true;
+      };
+      rebase = {
+        autoStash = true;
+        autoSquash = true;
+        missingCommitsCheck = "error";
+        updateRefs = true;
+      };
+      rerere.enabled = true;
+      merge.conflictStyle = "zdiff3";
+      diff = {
+        algorithm = "histogram";
+        colorMoved = "default";
+        mnemonicPrefix = true;
+      };
+      commit = {
+        gpgsign = true;
+        verbose = true;
+      };
+      tag = {
+        gpgsign = true;
+        sort = "version:refname";
+      };
+      branch.sort = "-committerdate";
+      status.showUntrackedFiles = "all";
+      column.ui = "auto";
+      help.autocorrect = "prompt";
       gpg.format = "ssh";
       gpg.ssh.allowedSignersFile = "${allowedSigners}";
       credential = {
