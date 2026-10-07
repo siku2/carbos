@@ -25,6 +25,7 @@ in
     ./fractal.nix
     ./git.nix
     ./gtk.nix
+    ./keyring.nix
     ./rbw.nix
     ./wallpaper.nix
     ./nextcloud.nix
