@@ -30,6 +30,8 @@
 
   services.lact.enable = true;
 
+  carbos.rlbot.enable = true;
+
   environment.systemPackages = with pkgs; [
     mangohud
     prismlauncher
