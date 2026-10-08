@@ -1,6 +1,9 @@
 { inputs, pkgs, ... }:
 {
-  imports = [ inputs.self.modules.darwin.unstable ];
+  imports = with inputs.self.modules.darwin; [
+    packages
+    unstable
+  ];
 
   nixpkgs = {
     hostPlatform = "aarch64-darwin";
@@ -26,12 +29,6 @@
           };
           dontFixup = true;
         };
-
-        binaryninja-free = final.callPackage ../../../pkgs/binaryninja-free.nix { };
-        cargo-clean-all = final.callPackage ../../../pkgs/cargo-clean-all.nix { };
-        claude-desktop = final.callPackage ../../../pkgs/claude-desktop.nix { };
-        cutter = final.callPackage ../../../pkgs/cutter.nix { };
-        windows-app = final.callPackage ../../../pkgs/windows-app.nix { };
       })
     ];
   };
