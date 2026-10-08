@@ -37,6 +37,12 @@ in
       "${inputs.claude-plugins-official}/plugins/frontend-design"
       "${inputs.claude-plugins-official}/plugins/rust-analyzer-lsp"
     ];
+    context = ./files/claude/CLAUDE.md;
+    rules = {
+      cargo = ./files/claude/rules/cargo.md;
+      rust = ./files/claude/rules/rust.md;
+    };
+    skills.create-pr = ./files/claude/skills/create-pr.md;
     settings = {
       attribution = {
         commit = "";
@@ -59,8 +65,6 @@ in
       remoteControlAtStartup = false;
     };
   };
-
-  home.file.".claude/skills/create-pr/SKILL.md".source = ./files/claude/skills/create-pr.md;
 
   programs.opencode = {
     enable = true;
