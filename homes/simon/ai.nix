@@ -1,4 +1,5 @@
 {
+  inputs,
   lib,
   pkgs,
   ...
@@ -32,7 +33,10 @@ in
   programs.claude-code = {
     enable = true;
     package = claudeCodeAllowingBypass;
-    context = ./files/CLAUDE.md;
+    plugins = [
+      "${inputs.claude-plugins-official}/plugins/frontend-design"
+      "${inputs.claude-plugins-official}/plugins/rust-analyzer-lsp"
+    ];
     settings = {
       attribution = {
         commit = "";
@@ -43,9 +47,6 @@ in
         CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY = "1";
       };
       permissions.defaultMode = "auto";
-      enabledPlugins = {
-        "rust-analyzer-lsp@claude-plugins-official" = true;
-      };
       skipDangerousModePermissionPrompt = true;
       theme = "dark";
       switchModelsOnFlag = false;
