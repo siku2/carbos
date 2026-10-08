@@ -17,8 +17,8 @@ in
 
     settings = {
       alias = {
-        ls-dead-branches = "!git fetch --prune && git for-each-ref --format '%(refname:short) %(upstream:track)' | awk '$2 == \"[gone]\" {print $1}'";
-        prune-dead-branches = "!git ls-dead-branches | xargs -r git branch -D";
+        list-dead-branches = "!git for-each-ref --format='%(refname:short) %(upstream:track)' refs/heads | awk '$2 == \"[gone]\" {print $1}'";
+        prune-dead-branches = "!f() { git fetch --prune && git list-dead-branches | while read branch; do git branch -D \"$branch\"; done; }; f";
       };
 
       user = {
