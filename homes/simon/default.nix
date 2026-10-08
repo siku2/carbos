@@ -20,6 +20,7 @@ in
     ./ai.nix
     ./atuin.nix
     ./bitwarden.nix
+    ./cli.nix
     ./dms.nix
     ./dsearch.nix
     ./firefox.nix
