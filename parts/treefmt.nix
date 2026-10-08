@@ -1,7 +1,8 @@
+{ inputs, ... }:
 {
-  projectRootFile = "flake.nix";
+  imports = [ inputs.treefmt-nix.flakeModule ];
 
-  programs = {
+  perSystem.treefmt.programs = {
     deadnix.enable = true;
     nixfmt.enable = true;
     shellcheck.enable = true;
