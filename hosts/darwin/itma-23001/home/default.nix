@@ -35,6 +35,7 @@ in
     direnv
     git
     rdp
+    rust
     starship
   ]);
 
@@ -48,7 +49,6 @@ in
     stateVersion = "26.05";
 
     packages = with pkgs; [
-      cargo-clean-all
       forgejo-cli
       nil
       nixd

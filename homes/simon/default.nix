@@ -39,6 +39,7 @@ in
     codex
     direnv
     git
+    rust
     starship
   ]);
 

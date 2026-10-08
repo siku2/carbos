@@ -16,7 +16,6 @@
       };
 
       shellAliases = {
-        x = "cargo run --quiet --bin xtask --";
         zed = "zeditor";
       };
     };
