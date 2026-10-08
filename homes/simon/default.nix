@@ -1,4 +1,5 @@
 {
+  inputs,
   lib,
   osConfig,
   pkgs,
@@ -20,7 +21,6 @@ in
     ./ai.nix
     ./atuin.nix
     ./bitwarden.nix
-    ./cli.nix
     ./dms.nix
     ./dsearch.nix
     ./firefox.nix
@@ -32,7 +32,19 @@ in
     ./wallpaper.nix
     ./nextcloud.nix
     ./niri.nix
-  ];
+  ]
+  ++ (with inputs.self.modules.homeManager; [
+    claude-code
+    cli
+    codex
+    direnv
+    git
+    starship
+  ]);
+
+  carbos.user = {
+    inherit (osConfig.carbos.user) fullName email;
+  };
 
   home = {
     stateVersion = "26.05";
@@ -78,13 +90,6 @@ in
       interactiveShellInit = ''
         set -g fish_greeting
       '';
-    };
-
-    starship.enable = true;
-
-    direnv = {
-      enable = true;
-      nix-direnv.enable = true;
     };
 
     ssh = {

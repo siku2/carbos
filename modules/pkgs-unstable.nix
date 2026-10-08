@@ -1,13 +1,17 @@
 { inputs, ... }:
 {
   nixpkgs.overlays = [
-    (_final: _prev: {
+    (final: _prev: {
       unstable = import inputs.nixpkgs-unstable {
-        system = _final.stdenv.hostPlatform.system;
+        system = final.stdenv.hostPlatform.system;
         config = {
           allowUnfree = true;
         };
       };
+
+      # Shared home modules use the plain names and expect current releases.
+      claude-code = final.unstable.claude-code;
+      codex = final.unstable.codex;
     })
   ];
 }

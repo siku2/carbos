@@ -1,6 +1,7 @@
 {
   imports = [
     ./devshell.nix
+    ./features.nix
     ./hosts.nix
     ./installer.nix
     ./treefmt.nix
