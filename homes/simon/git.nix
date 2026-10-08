@@ -51,7 +51,7 @@ in
         verbose = true;
       };
       tag = {
-        gpgsign = true;
+        forceSignAnnotated = true;
         sort = "version:refname";
       };
       branch.sort = "-committerdate";
