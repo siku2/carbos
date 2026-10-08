@@ -25,7 +25,6 @@ in
 {
   imports = [
     ./git.nix
-    ./rdp.nix
     ./ssh.nix
     ./zsh.nix
   ]
@@ -35,6 +34,7 @@ in
     codex
     direnv
     git
+    rdp
     starship
   ]);
 
