@@ -26,7 +26,7 @@ in
     let
       bundle = bundleFor system;
     in
-    {
+    lib.mkIf pkgs.stdenv.isLinux {
       packages = {
         carbos-install = pkgs.callPackage ../installer/package.nix { inherit bundle; };
 
