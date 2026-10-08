@@ -21,6 +21,7 @@ in
 
       plugins_order = [
         "filter#0"
+        "filter#1"
         "deepfilternet#0"
         "gate#0"
         "compressor#0"
@@ -43,6 +44,22 @@ in
         width = 4.0;
       };
 
+      # Broad PC fan hum at 170-225 Hz. Q 4 spares the voice fundamental around 100 Hz.
+      "filter#1" = {
+        balance = 0.0;
+        bypass = false;
+        equal-mode = "IIR";
+        frequency = 195.0;
+        gain = -6.0;
+        input-gain = 0.0;
+        mode = "RLC (BT)";
+        output-gain = 0.0;
+        quality = 4.0;
+        slope = "x1";
+        type = "Bell";
+        width = 4.0;
+      };
+
       "deepfilternet#0" = {
         attenuation-limit = 25.0;
         bypass = false;
@@ -55,7 +72,7 @@ in
         post-filter-beta = 0.0;
       };
 
-      # Soft expander that lowers what DeepFilterNet leaves of the room by 12 dB.
+      # Full gate. -72 dB is the LSP maximum and silences what DeepFilterNet leaves of the room.
       # The raw room sits at -55 dBFS and the quietest speech at about -42.
       "gate#0" = routing // {
         attack = 2.0;
@@ -73,7 +90,7 @@ in
         lpf-mode = "Off";
         makeup = 0.0;
         output-gain = 0.0;
-        reduction = -12.0;
+        reduction = -72.0;
         release = 200.0;
         stereo-split = false;
         wet = 0.0;
