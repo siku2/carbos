@@ -60,7 +60,7 @@ in
     };
   };
 
-  home.file.".claude/skills/create-pr/SKILL.md".source = ./files/skills/create-pr.md;
+  home.file.".claude/skills/create-pr/SKILL.md".source = ./files/claude/skills/create-pr.md;
 
   programs.opencode = {
     enable = true;
