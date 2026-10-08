@@ -10,7 +10,7 @@ let
   user = osConfig.carbos.user.login;
 
   secretspecManifest = ../../secretspec.toml;
-  secretspec = lib.getExe pkgs.unstable.secretspec;
+  secretspec = lib.getExe pkgs.secretspec;
 
   # A Nextcloud app password, not the login password. Settings > Security.
   password = [

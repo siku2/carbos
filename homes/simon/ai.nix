@@ -7,11 +7,11 @@ let
   secretspecManifest = ../../secretspec.toml;
 
   opencodeWithSecrets = pkgs.writeShellScriptBin "opencode" ''
-    exec ${lib.getExe pkgs.unstable.secretspec} --file ${secretspecManifest} run \
+    exec ${lib.getExe pkgs.secretspec} --file ${secretspecManifest} run \
       --scope opencode \
       --caller opencode \
       --reason "opencode needs the Z.ai key for its MCP servers" \
-      -- ${lib.getExe pkgs.unstable.opencode} "$@"
+      -- ${lib.getExe pkgs.opencode} "$@"
   '';
 in
 {

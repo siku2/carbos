@@ -10,9 +10,20 @@ let
           };
         };
 
-        # Shared home modules use the plain names and expect current releases.
-        claude-code = final.unstable.claude-code;
-        codex = final.unstable.codex;
+        # Packages that track unstable on every host.
+        inherit (final.unstable)
+          _1password-cli
+          _1password-gui
+          atuin
+          chatgpt
+          claude-code
+          codex
+          firefox-bin-unwrapped
+          google-chrome
+          opencode
+          secretspec
+          zed-editor
+          ;
       })
     ];
   };

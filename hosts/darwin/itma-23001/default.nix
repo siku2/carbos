@@ -8,18 +8,6 @@
   nixpkgs = {
     hostPlatform = "aarch64-darwin";
     config.allowUnfree = true;
-    overlays = [
-      (final: _prev: {
-        # "unwrapped" to preserve signature for 1password.
-        firefox-bin-unwrapped = final.unstable.firefox-bin-unwrapped;
-
-        google-chrome = final.unstable.google-chrome;
-        _1password-cli = final.unstable._1password-cli;
-        _1password-gui = final.unstable._1password-gui;
-        chatgpt = final.unstable.chatgpt;
-        zed-editor = final.unstable.zed-editor;
-      })
-    ];
   };
 
   nix = {
@@ -104,6 +92,7 @@
     chatgpt
     claude-desktop
     cutter
+    # "unwrapped" to preserve signature for 1password.
     firefox-bin-unwrapped
     google-chrome
     inkscape

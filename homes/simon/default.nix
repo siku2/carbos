@@ -67,7 +67,7 @@ in
       nextcloud-talk-desktop
       plexamp
       seahorse
-      unstable.secretspec
+      secretspec
       wl-clipboard
       zedCli
       zedPager
@@ -127,7 +127,7 @@ in
 
     zed-editor = {
       enable = true;
-      package = pkgs.unstable.zed-editor;
+      package = pkgs.zed-editor;
       extraPackages = [
         pkgs.nil
         pkgs.nixd

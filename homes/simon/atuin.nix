@@ -6,7 +6,7 @@
 }:
 let
   secretspecManifest = ../../secretspec.toml;
-  secretspec = lib.getExe pkgs.unstable.secretspec;
+  secretspec = lib.getExe pkgs.secretspec;
 
   keyPath = "${config.xdg.dataHome}/atuin/key";
 
@@ -23,7 +23,7 @@ in
 {
   programs.atuin = {
     enable = true;
-    package = pkgs.unstable.atuin;
+    package = pkgs.atuin;
     # Atuin generates a random key if none exists, so wait for the seeded one.
     enableFishIntegration = false;
     settings = {
