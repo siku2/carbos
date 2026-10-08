@@ -23,6 +23,7 @@
           fetch.prune = true;
           push = {
             autoSetupRemote = true;
+            gpgSign = "if-asked";
             useForceIfIncludes = true;
           };
           rebase = {
