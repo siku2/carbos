@@ -47,7 +47,11 @@ in
         CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY = "1";
       };
       permissions.defaultMode = "auto";
+      askUserQuestionTimeout = "10m";
+      enableArtifact = false;
+      feedbackDrafts = "off";
       skipDangerousModePermissionPrompt = true;
+      skipWorkflowUsageWarning = true;
       theme = "dark";
       switchModelsOnFlag = false;
       inputNeededNotifEnabled = true;
