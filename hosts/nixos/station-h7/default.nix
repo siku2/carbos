@@ -11,7 +11,7 @@
     ./gaming.nix
     ./hardware.nix
     ./rgb.nix
-    ../../modules
+    ../../../modules
   ];
 
   networking.hostName = "station-h7";

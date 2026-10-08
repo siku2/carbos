@@ -6,7 +6,7 @@
   imports = [
     ./disk.nix
     ./hardware.nix
-    ../../modules
+    ../../../modules
   ];
 
   networking.hostName = "carbon-x1";
