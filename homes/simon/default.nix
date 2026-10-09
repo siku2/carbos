@@ -57,6 +57,7 @@ in
       bitwarden-cli
       bitwarden-desktop
       devcontainer
+      file-roller
       forgejo-cli
       gh
       git-credential-manager
