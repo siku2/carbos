@@ -4,12 +4,37 @@
   ...
 }:
 let
-  # Controllers and DDR5 RGB restore state on resume, so one-shot is enough.
-  # Corsair Commander Core has no persistent lighting storage, so the only way
-  # to blank it is HOST mode, which leaves its pump and fan curve unmanaged.
+  detectors = [
+    "ASUS Aura Motherboard"
+    "ASUS TUF Radeon RX 7900 XTX Gaming OC"
+    "ENE SMBus DRAM"
+    "Logitech Powerplay Mat"
+    "NZXT RGB & Fan Controller"
+    "Razer Blackwidow Chroma V2"
+  ];
+
+  config =
+    pkgs.runCommand "openrgb-config"
+      {
+        nativeBuildInputs = [
+          pkgs.openrgb
+          pkgs.jq
+        ];
+        enabled = builtins.toJSON detectors;
+      }
+      ''
+        export HOME=$TMPDIR
+        openrgb --config "$TMPDIR" --noautoconnect --list-devices
+        mkdir $out
+        jq --argjson enabled "$enabled" \
+          '.Detectors.detectors |= with_entries(.value = (.key | IN($enabled[])))' \
+          "$TMPDIR/OpenRGB.json" > $out/OpenRGB.json
+      '';
+
   blank = pkgs.writeShellApplication {
     name = "rgb-blank";
     runtimeInputs = [ pkgs.openrgb ];
+    runtimeEnv.OPENRGB_CONFIG = config;
     text = builtins.readFile ./rgb-blank.sh;
   };
 
