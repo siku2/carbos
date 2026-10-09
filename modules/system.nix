@@ -67,7 +67,5 @@
     notifications.systembus-notify.enable = true;
   };
 
-  hardware.bluetooth.enable = true;
-
   zramSwap.enable = true;
 }
