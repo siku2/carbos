@@ -14,10 +14,6 @@
           "rust"
         ];
       };
-
-      shellAliases = {
-        zed = "zeditor";
-      };
     };
   };
 }

@@ -37,6 +37,7 @@ in
     rdp
     rust
     starship
+    zed
   ]);
 
   carbos.user = {
@@ -73,11 +74,7 @@ in
       flake = "/etc/nix-darwin";
     };
 
-    zed-editor = {
-      enable = true;
-      package = zed-editor;
-      defaultEditor = true;
-    };
+    zed-editor.package = zed-editor;
   };
 
   services.gpg-agent = {
