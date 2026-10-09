@@ -151,6 +151,9 @@ in
         git_panel.tree_view = true;
         session.trust_all_worktrees = true;
         disable_ai = true;
+        lsp = {
+          package-version-server.binary.path = lib.getExe pkgs.package-version-server;
+        };
         terminal.env = {
           EDITOR = "zed -ew";
           VISUAL = "zed -ew";
