@@ -26,8 +26,10 @@ in
   # A wired pad only announces itself after power-up. When nothing answers,
   # at boot or across suspend, it shuts off and ignores USB resets and GIP
   # packets. Cutting port power is the only thing that brings it back.
+  #
+  # xone also turns on remote wakeup at probe, which can abort a suspend.
   services.udev.extraRules = ''
-    ACTION=="bind", SUBSYSTEM=="usb", DRIVER=="xone-wired", ATTR{bInterfaceNumber}=="00", RUN+="${config.systemd.package}/bin/systemctl --no-block start xone-wake@%k.service"
+    ACTION=="bind", SUBSYSTEM=="usb", DRIVER=="xone-wired", ATTR{bInterfaceNumber}=="00", ATTR{../power/wakeup}="disabled", RUN+="${config.systemd.package}/bin/systemctl --no-block start xone-wake@%k.service"
   '';
 
   systemd.services."xone-wake@" = {
