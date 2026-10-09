@@ -18,11 +18,7 @@ in
     extraCompatPackages = [ pkgs.proton-cachyos ];
   };
 
-  programs.gamescope = {
-    enable = true;
-    capSysNice = true;
-  };
-
+  programs.gamescope.enable = true;
   programs.gamemode.enable = true;
 
   hardware.xone.enable = true;
