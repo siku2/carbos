@@ -9,13 +9,12 @@ output "Samsung Electric Company Odyssey G95NC HNTL300403" {
 layout {
     // Half of 7680 is a 16:9 3840x2160, three quarters is 24:9.
     preset-column-widths {
+        proportion 0.125
         proportion 0.25
-        proportion 0.33333
         proportion 0.5
-        proportion 0.66667
         proportion 0.75
     }
-    default-column-width { proportion 0.33333; }
+    default-column-width { proportion 0.25; }
 }
 
 window-rule {
@@ -24,4 +23,10 @@ window-rule {
     default-column-width { proportion 0.5; }
     variable-refresh-rate true
     open-fullscreen false
+}
+
+window-rule {
+    match app-id=r#"^steam$"# title=r#"^Friends List$"#
+    match app-id=r#"^firefox$"# title=r#"^Extension: \(Bitwarden Password Manager\)"#
+    default-column-width { proportion 0.125; }
 }
