@@ -20,7 +20,8 @@ where the 3 superscript makes a difference in readability.
 ### G3: plain-technical-english
 
 Write documentation in clear, simple, technical English. Don't add unnecessary
-flourishes. The goal is to be easily understandable for an international
+flourishes or marketing words like "comprehensive", "robust" or "seamless".
+The goal is to be easily understandable for an international
 audience. Prefer basic, easy to read sentences. We're not writing a novel here,
 we're writing for a technical audience! Respect the reader's time and
 intelligence and keep the length to an absolute minimum.
@@ -48,6 +49,10 @@ and can understand the code without excessive explanation. A comment is
 warranted only if the code is not self-explanatory. This applies to
 configuration files as well.
 
+### G7: no-unsolicited-review-comments
+
+Never leave comments on pull requests or issues unless explicitly asked.
+
 ## Commit style
 
 ### M1: commit-convention
@@ -68,11 +73,6 @@ Stick to subject-only commits. It's only appropriate to include a body in
 HIGHLY specific cases. Don't include a body by default and if you think one
 is needed ask the user.
 
-### M3: no-unsolicited-review-comments
+### M3: no-force-push
 
-Never leave comments on pull requests or issues unless explicitly asked.
-
-### M4: no-force-push
-
-Don't force push to a PR branch unless explicitly told to do so. We typically
-squash-merge, so the commit history on the branch does not matter.
+Don't force push to a PR branch unless explicitly told to do so.
