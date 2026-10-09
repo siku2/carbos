@@ -7,6 +7,16 @@
 }:
 let
   sshAuthSock = "\${XDG_RUNTIME_DIR}/rbw/ssh-agent-socket";
+
+  # SSH agent requests carry no environment, so rbw-agent reuses the one from
+  # the last rbw command. Until then pinentry has no display and fails.
+  primeAgent = pkgs.writeShellScript "rbw-agent-prime" ''
+    for _ in $(seq 50); do
+      [ -S "$XDG_RUNTIME_DIR/rbw/socket" ] && break
+      sleep 0.1
+    done
+    ${lib.getExe config.programs.rbw.package} unlocked || true
+  '';
 in
 {
   programs.rbw = {
@@ -36,6 +46,7 @@ in
     };
     Service = {
       ExecStart = "${lib.getExe' config.programs.rbw.package "rbw-agent"} --no-daemonize";
+      ExecStartPost = "${primeAgent}";
       Restart = "on-failure";
     };
     Install.WantedBy = [ "graphical-session.target" ];
