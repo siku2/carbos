@@ -38,13 +38,6 @@ let
     text = builtins.readFile ./rgb-blank.sh;
   };
 
-  resumeTargets = [
-    "suspend.target"
-    "hibernate.target"
-    "hybrid-sleep.target"
-    "suspend-then-hibernate.target"
-  ];
-
   unit = description: {
     inherit description;
     serviceConfig = {
@@ -63,9 +56,8 @@ in
   ];
 
   systemd.services = {
-    rgb-blank = lib.recursiveUpdate (unit "Blank RGB at boot and on resume") {
-      after = resumeTargets;
-      wantedBy = [ "multi-user.target" ] ++ resumeTargets;
+    rgb-blank = lib.recursiveUpdate (unit "Blank RGB at boot") {
+      wantedBy = [ "multi-user.target" ];
     };
 
     rgb-blank-pre-sleep = lib.recursiveUpdate (unit "Blank RGB before suspend") {
