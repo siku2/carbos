@@ -10,7 +10,6 @@
     ./disk.nix
     ./gaming.nix
     ./hardware.nix
-    ./rgb.nix
     ../../../modules
   ];
 
