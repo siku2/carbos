@@ -147,6 +147,10 @@ in
           Value = false;
           Status = "default";
         };
+        "browser.warnOnQuitShortcut" = {
+          Value = false;
+          Status = "default";
+        };
       };
 
       FirefoxHome = {
