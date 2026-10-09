@@ -1,4 +1,16 @@
-{ config, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
+let
+  xoneWake = pkgs.writeShellApplication {
+    name = "xone-wake";
+    runtimeInputs = [ pkgs.uhubctl ];
+    text = builtins.readFile ./xone-wake.sh;
+  };
+in
 {
   programs.steam = {
     enable = true;
@@ -13,9 +25,25 @@
 
   programs.gamemode.enable = true;
 
-  # xpad has no reset_resume, so a pad reset across suspend stays dead until
-  # replugged. xone's wired driver has no pm hooks, so usb reprobes it.
   hardware.xone.enable = true;
+
+  # A wired pad only announces itself after power-up. When nothing answers,
+  # at boot or across suspend, it shuts off and ignores USB resets and GIP
+  # packets. Cutting port power is the only thing that brings it back.
+  services.udev.extraRules = ''
+    ACTION=="bind", SUBSYSTEM=="usb", DRIVER=="xone-wired", ATTR{bInterfaceNumber}=="00", RUN+="${config.systemd.package}/bin/systemctl --no-block start xone-wake@%k.service"
+  '';
+
+  systemd.services."xone-wake@" = {
+    description = "Power cycle %i if no Xbox controller announces itself";
+    # The cycle rebinds the driver, so a pad that stays dead would loop.
+    startLimitIntervalSec = 60;
+    startLimitBurst = 3;
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${lib.getExe xoneWake} %i";
+    };
+  };
 
   systemd.tmpfiles.rules = [
     "d /games/steamapps 0755 ${config.carbos.user.login} users -"
