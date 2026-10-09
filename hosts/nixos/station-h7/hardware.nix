@@ -39,4 +39,8 @@
     # Navi 31 clock and fan control, which is what LACT drives.
     amdgpu.overdrive.enable = true;
   };
+
+  # When S3 aborts, systemd falls back to s2idle, which this board never
+  # leaves on its own.
+  systemd.sleep.settings.Sleep.SuspendState = "mem";
 }
