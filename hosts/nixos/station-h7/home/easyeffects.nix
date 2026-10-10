@@ -17,7 +17,8 @@ in
     enable = true;
 
     extraPresets.mic.input = {
-      blocklist = [ ];
+      # The DMS visualizer captures the speakers. It must not get the mic.
+      blocklist = [ "cava" ];
 
       plugins_order = [
         "filter#0"
@@ -139,6 +140,7 @@ in
       ${write} --group Window --key inputAutoloadingUsesFallback --type bool true
       ${write} --group Window --key inputAutoloadingFallbackPreset mic
       ${write} --group StreamInputs --key listenToMic --type bool false
+      ${write} --group StreamOutputs --key processAllOutputs --type bool false
     ''
   );
 }
