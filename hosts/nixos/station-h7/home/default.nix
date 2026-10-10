@@ -7,7 +7,8 @@
   ];
 
   # Vesktop instead of the official client: it can share audio on Wayland.
-  home.packages = [ pkgs.vesktop ];
+  # Vencord comes from our overlay with the local plugins.
+  home.packages = [ (pkgs.vesktop.override { withSystemVencord = true; }) ];
 
   carbos.wallpaper = {
     width = 7680;
