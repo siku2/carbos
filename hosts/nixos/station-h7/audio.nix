@@ -28,8 +28,8 @@ in
           { "node.name" = "alsa_input.usb-Solid_State_Logic_SSL_2_Mk_II-00.HiFi__Mic1__source"; }
         ];
         actions.update-props = {
-          "node.description" = "RØDE Procaster";
-          "node.nick" = "Procaster";
+          "node.description" = "RØDE Procaster (raw)";
+          "node.nick" = "Procaster (raw)";
           "priority.driver" = 3000;
           "priority.session" = 3000;
         };

@@ -1,7 +1,7 @@
 { pkgs, ... }:
 {
   imports = [
-    ./easyeffects.nix
+    ./mic.nix
     ./niri.nix
     ./steam.nix
   ];
