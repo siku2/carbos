@@ -20,7 +20,9 @@
         VENCORD_TYPES = types;
 
         shellHook = ''
-          ln -sfn "$VENCORD_TYPES" "$(git rev-parse --show-toplevel)/pkgs/vencord/.vencord-types"
+          if root=$(git rev-parse --show-toplevel 2>/dev/null); then
+            ln -sfn "$VENCORD_TYPES" "$root/pkgs/vencord/.vencord-types"
+          fi
         '';
       };
     };
