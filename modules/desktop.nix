@@ -7,6 +7,8 @@
   programs.niri.enable = true;
 
   programs.dms-shell.enable = true;
+  # dms exits with 128 + SIGTERM when it is stopped.
+  systemd.user.services.dms.serviceConfig.SuccessExitStatus = 143;
 
   services.displayManager.dms-greeter = {
     enable = true;
