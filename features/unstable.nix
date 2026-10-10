@@ -21,6 +21,7 @@ let
           firefox-bin-unwrapped
           google-chrome
           opencode
+          rust-analyzer
           secretspec
           zed-editor
           ;
