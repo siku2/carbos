@@ -28,5 +28,6 @@ window-rule {
 window-rule {
     match app-id=r#"^steam$"# title=r#"^Friends List$"#
     match app-id=r#"^firefox$"# title=r#"^Extension: \(Bitwarden Password Manager\)"#
+    match app-id=r#"^plexamp$"#
     default-column-width { proportion 0.125; }
 }
