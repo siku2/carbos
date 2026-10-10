@@ -53,7 +53,7 @@
         };
         userKeymaps = [
           {
-            context = "Terminal";
+            context = "Terminal && screen == alt";
             bindings = {
               ctrl-p = null;
             };
