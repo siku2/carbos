@@ -5,6 +5,7 @@
     ./features.nix
     ./hosts.nix
     ./installer.nix
+    ./lib.nix
     ./treefmt.nix
     ./typescript.nix
     ./vencord.nix
