@@ -41,6 +41,9 @@
     username = osConfig.carbos.user.login;
     homeDirectory = "/home/${osConfig.carbos.user.login}";
 
+    # AccountsService falls back to this when no icon is set.
+    file.".face".source = ./files/avatar.png;
+
     packages = with pkgs; [
       ansifilter
       bitwarden-cli
