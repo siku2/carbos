@@ -1,0 +1,58 @@
+# Voice call state of a chat client, for desktop widgets.
+interface io.siku2.VoiceCall
+
+# One rendition of an image, in pixels.
+type Image (
+  url: string,
+  width: int,
+  height: int
+)
+
+type Participant (
+  # Opaque and stable. A string, since chat IDs can exceed 2^53.
+  id: string,
+  name: string,
+  # Smallest first. Empty if there is no avatar.
+  avatar: []Image,
+  speaking: bool,
+  # Muted by themselves.
+  selfMuted: bool,
+  selfDeafened: bool,
+  # Muted by the server, for everyone.
+  serverMuted: bool,
+  serverDeafened: bool,
+  # Muted by the local user, for themselves only.
+  locallyMuted: bool,
+  # The local user.
+  self: bool
+)
+
+type Call (
+  # Changes when the user switches to another channel.
+  id: string,
+  # The channel name, or the other person's name in a direct call.
+  name: string,
+  # Null for direct and group calls.
+  server: ?string,
+  # In the order the client shows them.
+  participants: []Participant
+)
+
+type State (
+  # The local user's own toggles. They persist across calls.
+  muted: bool,
+  deafened: bool,
+  call: ?Call
+)
+
+# Replies with the current state. With "more", replies again on every change.
+method Watch() -> (state: State)
+
+method SetMute(muted: bool) -> ()
+method SetDeafen(deafened: bool) -> ()
+
+# Leaves the current call. With an id, only if that call is still the current one.
+method LeaveCall(id: ?string) -> ()
+
+# There is no call, or not the given one.
+error NotInCall ()
