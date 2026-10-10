@@ -1,7 +1,21 @@
+{ inputs, ... }:
 {
   flake.modules.homeManager.zed =
     { lib, pkgs, ... }:
     let
+      extensions = with (pkgs.extend inputs.zed-extensions.overlays.default).zed-extensions; [
+        cargo-tom
+        dockerfile
+        git-firefly
+        html
+        nix
+        sql
+        toml
+        xml
+      ];
+
+      extensionIds = map (ext: lib.removePrefix "zed-extension-" ext.pname) extensions;
+
       # home-manager builds the extraPackages wrapper inline and never exposes it,
       # so both of these resolve "zeditor" from PATH rather than from pkgs.
       zedPager = pkgs.writeShellScriptBin "zed-pager" ''
@@ -16,6 +30,8 @@
         if pkgs.stdenv.hostPlatform.isDarwin then "Library/Application Support/Zed" else ".local/share/zed";
     in
     {
+      imports = [ inputs.zed-extensions.homeManagerModules.default ];
+
       home.packages = [
         zedCli
         zedPager
@@ -24,6 +40,11 @@
       # Zed has no setting to stop language server downloads. A read-only
       # download directory makes them fail, so only servers from PATH run.
       home.file."${dataDir}/languages".source = pkgs.emptyDirectory;
+
+      programs.zed-editor-extensions = {
+        enable = true;
+        packages = extensions;
+      };
 
       programs.zed-editor = {
         enable = true;
@@ -41,18 +62,9 @@
           pkgs.vtsls
           pkgs.yaml-language-server
         ];
-        extensions = [
-          "cargo-tom"
-          "dockerfile"
-          "git-firefly"
-          "html"
-          "nix"
-          "sql"
-          "toml"
-          "xml"
-        ];
         userSettings = {
           auto_update = false;
+          auto_update_extensions = lib.genAttrs extensionIds (_: false);
           cli_default_open_behavior = "new_window";
           edit_predictions.provider = "copilot";
           git_panel.tree_view = true;
