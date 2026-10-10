@@ -19,6 +19,8 @@ let
   packages.nixpkgs.overlays = [ overlay ];
 in
 {
+  flake.overlays.default = overlay;
+
   flake.modules = {
     nixos.packages = packages;
     darwin.packages = packages;
