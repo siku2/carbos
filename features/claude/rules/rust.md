@@ -32,11 +32,16 @@ details. Name the variable `err` and consistently use `error` as the key.
 
 ## R6: behaviour-belongs-to-a-type
 
-Don't write freestanding helper functions when a local type can own the
-behaviour. For example, construct error variants through associated functions
-on the error type, not through a free `fn`. Prefer a `From` impl where the
-conversion is natural. A freestanding function is only acceptable when the
-type comes from an external crate.
+A function that works on a type's data, or produces a value of that type,
+belongs to that type: a method, an associated function, or a trait impl
+(`From`, `TryFrom`, `FromStr`, ...). For example, construct error variants
+through associated functions on the error type, not through a free `fn`.
+
+A function with no owning type, such as a stateless decoder or a group of
+test helpers, belongs in a module.
+
+A unit struct is only justified when it implements a trait, is used as a
+type parameter or marker, or is a meaningful value in its own right.
 
 ## R7: newtype-invariants
 
