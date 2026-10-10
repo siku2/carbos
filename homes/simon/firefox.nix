@@ -147,6 +147,10 @@ in
           Value = false;
           Status = "default";
         };
+        "browser.startup.page" = {
+          Value = 1;
+          Status = "default";
+        };
         "browser.warnOnQuitShortcut" = {
           Value = false;
           Status = "default";
