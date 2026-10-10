@@ -17,7 +17,11 @@ importers:
 
   packages/varlink: {}
 
-  plugins/voiceCallBridge: {}
+  plugins/voiceCallBridge:
+    dependencies:
+      '@carbos/varlink':
+        specifier: workspace:*
+        version: link:../../packages/varlink
 
 packages:
 

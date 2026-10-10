@@ -1,5 +1,8 @@
 {
   "name": "voice-call-bridge",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@carbos/varlink": "workspace:*"
+  }
 }

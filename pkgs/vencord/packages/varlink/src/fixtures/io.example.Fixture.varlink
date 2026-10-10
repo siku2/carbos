@@ -1,0 +1,24 @@
+# Covers every construct the generator handles. Backticks ` and ${x} survive.
+interface io.example.Fixture
+
+type Mode (fast, slow)
+
+type Thing (
+  # Documented.
+  flag: bool,
+  count: int,
+  ratio: float,
+  label: ?string,
+  extra: object,
+  tags: []?string,
+  byName: [string]Mode,
+  inline: (x: int),
+  mode: (on, off)
+)
+
+method Get(id: string) -> (thing: Thing)
+
+method Ping() -> ()
+
+error Missing (id: string)
+error Busy ()

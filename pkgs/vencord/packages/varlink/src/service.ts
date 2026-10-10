@@ -1,5 +1,5 @@
 import { interfaceNotFound } from "./errors.ts";
-import { call, defineInterface, type Interface, string } from "./interface.ts";
+import { defineInterface, type Interface } from "./interface.ts";
 
 export interface ServerInfo {
   readonly vendor: string;
@@ -8,6 +8,7 @@ export interface ServerInfo {
   readonly url: string;
 }
 
+// Part of the protocol itself, so it is written out here rather than generated.
 const description = `interface org.varlink.service
 
 method GetInfo() -> (
@@ -33,21 +34,20 @@ export function serviceInterface(
   interfaces: () => Iterable<Interface>,
 ): Interface {
   return defineInterface(description, {
-    GetInfo: call(
-      () => undefined,
-      () => ({
-        ...info,
-        interfaces: Array.from(interfaces(), (entry) => entry.name),
-      }),
-    ),
-    GetInterfaceDescription: call(
-      (parameters) => string(parameters, "interface"),
-      (name) => {
-        for (const entry of interfaces()) {
-          if (entry.name === name) return { description: entry.description };
-        }
-        throw interfaceNotFound(name);
-      },
-    ),
+    GetInfo: () => ({
+      ...info,
+      interfaces: Array.from(interfaces(), (entry) => entry.schema.name),
+    }),
+    GetInterfaceDescription: ({
+      interface: name,
+    }: {
+      readonly interface: string;
+    }) => {
+      for (const entry of interfaces()) {
+        if (entry.schema.name === name)
+          return { description: entry.description };
+      }
+      throw interfaceNotFound(name);
+    },
   });
 }

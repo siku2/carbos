@@ -57,6 +57,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   checkPhase = ''
     runHook preCheck
 
+    pnpm run generate --check
     ln -s ${types} .vencord-types
     pnpm run typecheck
     rm .vencord-types

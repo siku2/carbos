@@ -5,7 +5,7 @@ import { createServer } from "node:net";
 import { describe, it } from "node:test";
 import { promisify } from "node:util";
 import { VarlinkError } from "./errors.ts";
-import { call, defineInterface, stream, string } from "./interface.ts";
+import { defineInterface } from "./interface.ts";
 import { VarlinkServer } from "./server.ts";
 import { TestClient, tempSocket, untilAborted } from "./testing.ts";
 
@@ -18,11 +18,13 @@ const info = {
 
 const description = `interface io.test
 
-method Echo(text: string) -> (text: string)
+method Echo(text: string, note: ?string) -> (text: string)
 method Count(to: int) -> (n: int)
 method Watch() -> (n: int)
 method Fail() -> ()
+method FailBadly() -> ()
 method Crash() -> ()
+method Lie() -> (n: int)
 
 error Failed (reason: string)
 `;
@@ -35,40 +37,29 @@ function testServer() {
     onError: (error) => errors.push(error),
     interfaces: [
       defineInterface(description, {
-        Echo: call(
-          (parameters) => string(parameters, "text"),
-          (text) => ({ text }),
-        ),
-        Count: stream(
-          (parameters) => Number(parameters.to),
-          async function* (to) {
-            for (let n = 0; n < to; n++) yield { n };
-            return { n: to };
-          },
-        ),
-        Watch: stream(
-          () => undefined,
-          async function* (_, { signal }) {
-            try {
-              yield { n: 0 };
-              return await untilAborted(signal);
-            } finally {
-              watch.cleanedUp.resolve();
-            }
-          },
-        ),
-        Fail: call(
-          () => undefined,
-          () => {
-            throw new VarlinkError("io.test.Failed", { reason: "asked to" });
-          },
-        ),
-        Crash: call(
-          () => undefined,
-          () => {
-            throw new Error("bug");
-          },
-        ),
+        Echo: ({ text }: { text: string }) => ({ text }),
+        Count: async function* ({ to }: { to: number }) {
+          for (let n = 0; n < to; n++) yield { n };
+          return { n: to };
+        },
+        Watch: async function* (_: unknown, { signal }) {
+          try {
+            yield { n: 0 };
+            return await untilAborted(signal);
+          } finally {
+            watch.cleanedUp.resolve();
+          }
+        },
+        Fail: () => {
+          throw new VarlinkError("io.test.Failed", { reason: "asked to" });
+        },
+        FailBadly: () => {
+          throw new VarlinkError("io.test.Failed", { reason: 1 });
+        },
+        Crash: () => {
+          throw new Error("bug");
+        },
+        Lie: () => ({ n: "one" }),
       }),
     ],
   });
@@ -122,6 +113,35 @@ describe("VarlinkServer", () => {
       },
     );
     client.close();
+  });
+
+  it("checks parameters against the schema", async () => {
+    await using s = await serve();
+    const client = await TestClient.connect(s.path);
+    const echo = (parameters: object) =>
+      client.call({ method: "io.test.Echo", parameters });
+    const invalid = (parameter: string) => ({
+      error: "org.varlink.service.InvalidParameter",
+      parameters: { parameter },
+    });
+
+    assert.deepEqual(await echo({}), invalid("text"));
+    assert.deepEqual(await echo({ text: "a", extra: 1 }), invalid("extra"));
+    assert.deepEqual(await echo({ text: "a", note: 1 }), invalid("note"));
+    assert.deepEqual(await echo({ text: "a", note: null }), {
+      parameters: { text: "a" },
+    });
+    client.close();
+  });
+
+  it("treats replies that break the schema as bugs", async () => {
+    await using s = await serve();
+    for (const method of ["io.test.Lie", "io.test.FailBadly"]) {
+      const client = await TestClient.connect(s.path);
+      client.send({ method });
+      await client.closed;
+    }
+    assert.equal(s.errors.length, 2);
   });
 
   it("passes interface errors to the client", async () => {

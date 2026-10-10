@@ -11,9 +11,11 @@ import {
   methodNotFound,
   VarlinkError,
 } from "./errors.ts";
-import type { Interface, Method } from "./interface.ts";
+import type { MethodDefinition } from "./idl.ts";
+import type { AnyHandler, Interface } from "./interface.ts";
 import { encode, MessageReader, parseRequest, type Reply } from "./protocol.ts";
 import { type ServerInfo, serviceInterface } from "./service.ts";
+import { invalidField } from "./validate.ts";
 
 export interface ServerOptions {
   readonly info: ServerInfo;
@@ -37,7 +39,7 @@ export class VarlinkServer {
       this.#interfaces.values(),
     );
     for (const entry of [service, ...options.interfaces]) {
-      this.#interfaces.set(entry.name, entry);
+      this.#interfaces.set(entry.schema.name, entry);
     }
     this.#onError = options.onError ?? console.error;
     this.#server = createServer((socket) => this.#accept(socket));
@@ -133,47 +135,93 @@ export class VarlinkServer {
 
     try {
       if (request.upgrade) throw invalidParameter("upgrade");
-      const method = this.#resolve(request.method);
-      const context = { signal };
+      const { entry, definition, handler } = this.#resolve(request.method);
+      const invalid = invalidField(
+        entry.schema,
+        definition.input,
+        request.parameters,
+      );
+      if (invalid !== undefined) throw invalidParameter(invalid);
 
-      if (method.kind === "call") {
-        send({ parameters: await method.run(request.parameters, context) });
+      // Replies that break the schema are bugs, not the client's fault.
+      const checked = (output: object): object => {
+        const field = invalidField(
+          entry.schema,
+          definition.output,
+          output as Record<string, unknown>,
+        );
+        if (field !== undefined) {
+          throw new Error(
+            `${request.method} replied with an invalid "${field}"`,
+          );
+        }
+        return output;
+      };
+
+      // The parameters match the schema the handler's types come from.
+      const result = handler(request.parameters as never, { signal });
+      if (!isAsyncGenerator(result)) {
+        send({ parameters: checked(await result) });
         return;
       }
 
-      const replies = method.run(request.parameters, context);
       try {
         for (
-          let result = await replies.next();
+          let next = await result.next();
           !signal.aborted;
-          result = await replies.next()
+          next = await result.next()
         ) {
-          if (result.done || !request.more) {
-            send({ parameters: result.value });
+          if (next.done || !request.more) {
+            send({ parameters: checked(next.value) });
             return;
           }
-          send({ parameters: result.value, continues: true });
+          send({ parameters: checked(next.value), continues: true });
         }
       } finally {
-        await replies.return({});
+        await result.return({});
       }
     } catch (error) {
       if (signal.aborted) return;
       if (!(error instanceof VarlinkError)) throw error;
+      this.#checkError(error);
       send({ error: error.error, parameters: error.parameters });
     }
   }
 
-  #resolve(qualified: string): Method {
+  #resolve(qualified: string): {
+    entry: Interface;
+    definition: MethodDefinition;
+    handler: AnyHandler;
+  } {
     const dot = qualified.lastIndexOf(".");
     const name = qualified.slice(0, Math.max(dot, 0));
     const entry = this.#interfaces.get(name);
     if (entry === undefined) throw interfaceNotFound(name);
-    const method = entry.methods.get(qualified.slice(dot + 1));
-    if (method === undefined) throw methodNotFound(qualified);
-    return method;
+    const method = qualified.slice(dot + 1);
+    const definition = entry.schema.methods.get(method);
+    const handler = entry.handlers.get(method);
+    if (definition === undefined || handler === undefined) {
+      throw methodNotFound(qualified);
+    }
+    return { entry, definition, handler };
+  }
+
+  #checkError({ error, parameters }: VarlinkError): void {
+    const dot = error.lastIndexOf(".");
+    const entry = this.#interfaces.get(error.slice(0, dot));
+    const definition = entry?.schema.errors.get(error.slice(dot + 1));
+    if (entry === undefined || definition === undefined) return;
+    const field = invalidField(entry.schema, definition.parameters, parameters);
+    if (field !== undefined) {
+      throw new Error(`${error} has an invalid "${field}"`);
+    }
   }
 }
+
+const isAsyncGenerator = (
+  value: unknown,
+): value is AsyncGenerator<object, object, undefined> =>
+  typeof value === "object" && value !== null && Symbol.asyncIterator in value;
 
 const isErrno = (error: unknown, code: string) =>
   error instanceof Error && "code" in error && error.code === code;

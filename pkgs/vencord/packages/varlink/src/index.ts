@@ -4,16 +4,15 @@ export {
   methodNotFound,
   VarlinkError,
 } from "./errors.ts";
+export type { Schema } from "./idl.ts";
+export { IdlError, parse } from "./idl.ts";
 export {
-  boolean,
+  type AnyHandler,
   type Context,
-  call,
   defineInterface,
+  type Empty,
+  type Handler,
   type Interface,
-  type Method,
-  type Parameters,
-  stream,
-  string,
 } from "./interface.ts";
 export { type ServerOptions, VarlinkServer } from "./server.ts";
 export type { ServerInfo } from "./service.ts";
