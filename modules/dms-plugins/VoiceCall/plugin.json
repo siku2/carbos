@@ -1,0 +1,11 @@
+{
+  "id": "voiceCall",
+  "name": "Voice Call",
+  "description": "Shows the current Vesktop voice call with who is speaking and quick controls",
+  "version": "1.0.0",
+  "author": "Simon Berger",
+  "icon": "call",
+  "type": "widget",
+  "capabilities": ["dankbar-widget"],
+  "component": "./VoiceCallWidget.qml"
+}
