@@ -35,6 +35,8 @@ window-rule {
 window-rule {
     match app-id=r#"^kicad$"#
     default-column-width { proportion 0.5; }
+    // The editors remember being maximized and ask for it again.
+    open-maximized-to-edges false
 }
 
 // The project manager shares the app id with the editors.
