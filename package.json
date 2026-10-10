@@ -1,0 +1,12 @@
+{
+  "name": "carbos",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc && pnpm --recursive typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

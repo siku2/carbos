@@ -11,7 +11,7 @@ upstream.overrideAttrs (old: {
   # Vencord imports to declarations, so the plugins are copied, not linked.
   preBuild = (old.preBuild or "") + ''
     mkdir -p src/userplugins
-    for plugin in ${workspace}/plugins/*; do
+    for plugin in ${workspace}/pkgs/vencord/plugins/*; do
       target="src/userplugins/$(basename "$plugin")"
       cp -r --no-preserve=mode "$plugin" "$target"
       if [ -e "$plugin/node_modules" ]; then

@@ -6,6 +6,7 @@
     ./hosts.nix
     ./installer.nix
     ./treefmt.nix
+    ./typescript.nix
     ./vencord.nix
   ];
 

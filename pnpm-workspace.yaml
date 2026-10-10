@@ -1,0 +1,9 @@
+packages:
+  - pkgs/vencord
+  - pkgs/vencord/packages/*
+  - pkgs/vencord/plugins/*
+
+# Every package uses the same toolchain.
+catalog:
+  "@types/node": ^24.19.1
+  typescript: ^7.0.2

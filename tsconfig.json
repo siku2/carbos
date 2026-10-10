@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ESNext"],
+    "types": ["node"],
+    "erasableSyntaxOnly": true
+  },
+  // Scripts that Node runs directly. Projects with their own config are excluded.
+  "include": ["**/*.ts"],
+  "exclude": ["**/node_modules", "pkgs/vencord"]
+}

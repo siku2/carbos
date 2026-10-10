@@ -2,3 +2,4 @@
 /result
 /result-*
 /.pnpm-store/
+node_modules/
