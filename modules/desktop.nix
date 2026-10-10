@@ -8,7 +8,7 @@
 
   programs.dms-shell = {
     enable = true;
-    plugins.WebSearch.src = ./dms-plugins/WebSearch;
+    plugins.WebSearch.src = pkgs.dms-plugins.webSearch;
   };
 
   services.displayManager.dms-greeter = {
