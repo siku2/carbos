@@ -78,6 +78,23 @@ let
   pluginSettingsFile = json.generate "dms-plugin-settings.json" (
     lib.mapAttrs (_: plugin: { enabled = true; } // plugin.settings) enabled
   );
+  files = {
+    "settings.json" = settingsFile;
+    "plugin_settings.json" = pluginSettingsFile;
+  }
+  // lib.mapAttrs' (name: plugin: lib.nameValuePair "plugins/${name}" plugin.package) enabled;
+
+  # One store path that changes with any of the files.
+  bundle = pkgs.linkFarm "dms-config" files;
+
+  restart = pkgs.writeShellApplication {
+    name = "dms-restart";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.systemd
+    ];
+    text = builtins.readFile ./restart.sh;
+  };
 in
 {
   options.carbos.dms = {
@@ -100,19 +117,22 @@ in
     };
   };
 
-  # Read-only on purpose. DMS keeps changes made in its settings until it
-  # restarts and offers to copy them.
-  config.xdg.configFile = {
-    "DankMaterialShell/settings.json" = {
-      source = settingsFile;
-      force = true;
-    };
-    "DankMaterialShell/plugin_settings.json" = {
-      source = pluginSettingsFile;
-      force = true;
-    };
-  }
-  // lib.mapAttrs' (
-    name: plugin: lib.nameValuePair "DankMaterialShell/plugins/${name}" { source = plugin.package; }
-  ) enabled;
+  config = {
+    # Read-only on purpose. DMS keeps changes made in its settings until it
+    # restarts and offers to copy them.
+    xdg.configFile = lib.mapAttrs' (
+      path: source:
+      lib.nameValuePair "DankMaterialShell/${path}" {
+        inherit source;
+        force = true;
+      }
+    ) files;
+
+    home.activation.dmsRestart = lib.hm.dag.entryAfter [ "reloadSystemd" ] ''
+      STAMP=${lib.escapeShellArg "${config.xdg.stateHome}/carbos/dms-config"} \
+      CONFIG=${bundle} \
+      QML_CACHE=${lib.escapeShellArg "${config.xdg.cacheHome}/quickshell/qmlcache"} \
+      run ${lib.getExe restart}
+    '';
+  };
 }
