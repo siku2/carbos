@@ -33,5 +33,5 @@
       "@webpack/types": ["./.vencord-types/webpack/types"]
     }
   },
-  "include": ["plugins", ".vencord-types/globals.d.ts"]
+  "include": ["packages", "plugins", ".vencord-types/globals.d.ts"]
 }

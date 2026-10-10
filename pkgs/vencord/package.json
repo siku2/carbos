@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "typecheck": "tsc"
+    "typecheck": "tsc && tsc -p packages/varlink",
+    "test": "node --test \"packages/*/src/**/*.test.ts\""
   },
   "devDependencies": {
     "@types/node": "^24.19.1",

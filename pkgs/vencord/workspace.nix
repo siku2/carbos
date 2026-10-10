@@ -5,6 +5,7 @@
   nodejs,
   pnpm_11,
   pnpmConfigHook,
+  systemdMinimal,
   types,
 }:
 let
@@ -14,6 +15,7 @@ let
     ./package.json
     ./pnpm-lock.yaml
     ./pnpm-workspace.yaml
+    (lib.fileset.fileFilter (file: file.name == "package.json") ./packages)
     (lib.fileset.fileFilter (file: file.name == "package.json") ./plugins)
   ];
 in
@@ -26,6 +28,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     fileset = lib.fileset.unions [
       manifests
       ./tsconfig.json
+      ./packages
       ./plugins
     ];
   };
@@ -46,6 +49,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     nodejs
     pnpm
     pnpmConfigHook
+    # varlinkctl, the reference client for the varlink tests.
+    systemdMinimal
   ];
 
   doCheck = true;
@@ -55,6 +60,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     ln -s ${types} .vencord-types
     pnpm run typecheck
     rm .vencord-types
+    pnpm run test
 
     runHook postCheck
   '';
