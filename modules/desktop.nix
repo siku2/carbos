@@ -6,10 +6,7 @@
 {
   programs.niri.enable = true;
 
-  programs.dms-shell = {
-    enable = true;
-    plugins.WebSearch.src = pkgs.dms-plugins.webSearch;
-  };
+  programs.dms-shell.enable = true;
 
   services.displayManager.dms-greeter = {
     enable = true;

@@ -9,7 +9,7 @@
     ./ai.nix
     ./atuin.nix
     ./bitwarden.nix
-    ./dms.nix
+    ./dms
     ./dsearch.nix
     ./firefox.nix
     ./fractal.nix

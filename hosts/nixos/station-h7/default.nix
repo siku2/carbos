@@ -1,7 +1,6 @@
 {
   config,
   inputs,
-  pkgs,
   ...
 }:
 {
@@ -17,9 +16,6 @@
   networking.hostName = "station-h7";
 
   home-manager.users.${config.carbos.user.login}.imports = [ ./home ];
-
-  # Shows calls from the VoiceCallBridge plugin of the Vesktop install in ./home.
-  programs.dms-shell.plugins.VoiceCall.src = pkgs.dms-plugins.voiceCall;
 
   system.stateVersion = "26.05";
 }
