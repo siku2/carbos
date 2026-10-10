@@ -1,13 +1,13 @@
 {
-    "id": "webSearch",
-    "name": "Web Search",
-    "description": "Search the web or open a URL in a new Firefox window",
-    "version": "1.0.0",
-    "author": "Simon Berger",
-    "icon": "search",
-    "type": "launcher",
-    "capabilities": ["launcher"],
-    "component": "./WebSearchLauncher.qml",
-    "trigger": "!",
-    "permissions": ["settings_read", "settings_write"]
+  "id": "webSearch",
+  "name": "Web Search",
+  "description": "Search the web or open a URL in a new Firefox window",
+  "version": "1.0.0",
+  "author": "Simon Berger",
+  "icon": "search",
+  "type": "launcher",
+  "capabilities": ["launcher"],
+  "component": "./WebSearchLauncher.qml",
+  "trigger": "!",
+  "permissions": ["settings_read", "settings_write"]
 }
