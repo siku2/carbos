@@ -5,7 +5,7 @@
   "scripts": {
     "generate": "node packages/varlink/src/generate.ts",
     "typecheck": "tsc && tsc -p packages/varlink",
-    "test": "node --test \"packages/*/src/**/*.test.ts\" \"plugins/*/*.test.ts\""
+    "test": "node --test --test-timeout=10000 \"packages/*/src/**/*.test.ts\" \"plugins/*/*.test.ts\""
   },
   "devDependencies": {
     "@types/node": "^24.19.1",
