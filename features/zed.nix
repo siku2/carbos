@@ -28,6 +28,8 @@
       programs.zed-editor = {
         enable = true;
         defaultEditor = true;
+        mutableUserKeymaps = false;
+        mutableUserSettings = false;
         extraPackages = [
           pkgs.bash-language-server
           pkgs.nil
