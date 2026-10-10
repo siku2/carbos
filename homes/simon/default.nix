@@ -17,6 +17,7 @@
     ./gtk.nix
     ./keyring.nix
     ./kicad
+    ./mic/module.nix
     ./rbw.nix
     ./wallpaper.nix
     ./nextcloud.nix
