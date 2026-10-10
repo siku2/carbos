@@ -4,17 +4,28 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const read = (path) => readFileSync(join(process.argv[2], path), "utf8");
+interface SpecEntry {
+  readonly def: unknown;
+  readonly persist?: boolean;
+}
 
-function find(source, pattern, what) {
-  const match = pattern.exec(source);
-  if (match === null) throw new Error(`DMS sources: no ${what} found`);
-  return match[1];
+const dms = process.argv[2];
+if (dms === undefined) throw new Error("usage: spec.ts <dms share directory>");
+
+const read = (path: string): string => readFileSync(join(dms, path), "utf8");
+
+function find(source: string, pattern: RegExp, what: string): string {
+  const match = pattern.exec(source)?.[1];
+  if (match === undefined) throw new Error(`DMS sources: no ${what} found`);
+  return match;
 }
 
 // A QML JavaScript library. Without its pragma it is plain JavaScript.
 const library = read("Common/settings/SettingsSpec.js").replace(/^\..*$/gm, "");
-const spec = new Function(`${library}\nreturn SPEC;`)();
+const spec = new Function(`${library}\nreturn SPEC;`)() as Record<
+  string,
+  SpecEntry
+>;
 
 const defaults = Object.fromEntries(
   Object.entries(spec)

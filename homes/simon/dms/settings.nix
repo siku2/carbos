@@ -15,6 +15,6 @@ runCommand "dms-settings.json"
     passAsFile = [ "declared" ];
   }
   ''
-    node ${./spec.mjs} ${dms}/share/quickshell/dms > spec.json
+    node ${./spec.ts} ${dms}/share/quickshell/dms > spec.json
     jq --slurpfile spec spec.json -f ${./settings.jq} "$declaredPath" > $out
   ''
