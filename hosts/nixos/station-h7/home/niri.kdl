@@ -31,3 +31,14 @@ window-rule {
     match app-id=r#"^plexamp$"#
     default-column-width { proportion 0.125; }
 }
+
+window-rule {
+    match app-id=r#"^kicad$"#
+    default-column-width { proportion 0.5; }
+}
+
+// The project manager shares the app id with the editors.
+window-rule {
+    match app-id=r#"^kicad$"# title=r#"KiCad \d+\.\d+$"#
+    default-column-width { proportion 0.125; }
+}
