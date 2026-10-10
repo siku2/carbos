@@ -34,7 +34,7 @@ type Call (
   name: string,
   # Null for direct and group calls.
   server: ?string,
-  # In the order the client shows them.
+  # Sorted by name.
   participants: []Participant
 )
 

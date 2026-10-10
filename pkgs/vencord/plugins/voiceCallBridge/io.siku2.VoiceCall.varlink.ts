@@ -38,7 +38,7 @@ type Call (
   name: string,
   # Null for direct and group calls.
   server: ?string,
-  # In the order the client shows them.
+  # Sorted by name.
   participants: []Participant
 )
 
@@ -95,7 +95,7 @@ export interface Call {
   readonly name: string;
   /** Null for direct and group calls. */
   readonly server?: string | null;
-  /** In the order the client shows them. */
+  /** Sorted by name. */
   readonly participants: readonly Participant[];
 }
 
