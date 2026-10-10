@@ -16,6 +16,7 @@
     ./git.nix
     ./gtk.nix
     ./keyring.nix
+    ./kicad
     ./rbw.nix
     ./wallpaper.nix
     ./nextcloud.nix
@@ -54,7 +55,6 @@
       gh
       git-credential-manager
       inkscape
-      kicad
       libsecret
       nautilus
       nextcloud-talk-desktop
