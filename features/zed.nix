@@ -1,7 +1,12 @@
 { inputs, ... }:
 {
   flake.modules.homeManager.zed =
-    { lib, pkgs, ... }:
+    {
+      config,
+      lib,
+      pkgs,
+      ...
+    }:
     let
       extensions = with (pkgs.extend inputs.zed-extensions.overlays.default).zed-extensions; [
         cargo-tom
@@ -27,7 +32,10 @@
       '';
 
       dataDir =
-        if pkgs.stdenv.hostPlatform.isDarwin then "Library/Application Support/Zed" else ".local/share/zed";
+        if pkgs.stdenv.hostPlatform.isDarwin then
+          "Library/Application Support/Zed"
+        else
+          "${config.xdg.dataHome}/zed";
     in
     {
       imports = [ inputs.zed-extensions.homeManagerModules.default ];
