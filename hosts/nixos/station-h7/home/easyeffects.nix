@@ -17,8 +17,8 @@ in
     enable = true;
 
     extraPresets.mic.input = {
-      # The DMS visualizer captures the speakers. It must not get the mic.
-      blocklist = [ "cava" ];
+      # Easy Effects rejects a preset without it.
+      blocklist = [ ];
 
       plugins_order = [
         "filter#0"
@@ -140,7 +140,18 @@ in
       ${write} --group Window --key inputAutoloadingUsesFallback --type bool true
       ${write} --group Window --key inputAutoloadingFallbackPreset mic
       ${write} --group StreamInputs --key listenToMic --type bool false
-      ${write} --group StreamOutputs --key processAllOutputs --type bool false
+      ${write} --group EffectsPipelines --key processAllOutputs --type bool false
+      ${write} --group EffectsPipelines --key processAllInputs --type bool false
     ''
   );
+
+  # Apps get the processed mic as the default source instead of being moved to
+  # it. Wireplumber falls back to the raw mic while Easy Effects is not running.
+  systemd.user.services.easyeffects = {
+    Unit = {
+      After = [ "wireplumber.service" ];
+      Wants = [ "wireplumber.service" ];
+    };
+    Service.ExecStartPost = "${pkgs.pipewire}/bin/pw-metadata 0 default.configured.audio.source '{\"name\":\"easyeffects_source\"}' Spa:String:JSON";
+  };
 }
