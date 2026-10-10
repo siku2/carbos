@@ -8,6 +8,8 @@
     gtk2.enable = false;
     gtk3.extraCss = ''@import "dank-colors.css";'';
     gtk4.extraCss = ''@import "dank-colors.css";'';
+    # home-manager writes the enum's number, but GTK only parses its nick.
+    gtk4.extraConfig.gtk-interface-color-scheme = "dark";
   };
 
   # Outside Plasma, KDE apps fall back to light Breeze. DMS's matugen writes
