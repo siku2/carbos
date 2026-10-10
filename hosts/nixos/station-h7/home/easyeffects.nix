@@ -24,7 +24,6 @@ in
         "filter#1"
         "deepfilternet#0"
         "gate#0"
-        "compressor#0"
         "limiter#0"
       ];
 
@@ -102,39 +101,6 @@ in
           source = "Middle";
           stereo-split-source = "Left/Right";
           type = "Internal";
-        };
-      };
-
-      # Speech sits at about -26 dBFS RMS with the gain maxed. This lifts it to -20.
-      "compressor#0" = routing // {
-        attack = 10.0;
-        boost-amount = 6.0;
-        boost-threshold = -72.0;
-        bypass = false;
-        dry = off;
-        hpf-frequency = 10.0;
-        hpf-mode = "Off";
-        input-gain = 0.0;
-        knee = -6.0;
-        lpf-frequency = 20000.0;
-        lpf-mode = "Off";
-        makeup = 14.0;
-        mode = "Downward";
-        output-gain = 0.0;
-        ratio = 3.0;
-        release = 120.0;
-        release-threshold = off;
-        stereo-split = false;
-        threshold = -26.0;
-        wet = 0.0;
-        sidechain = {
-          lookahead = 0.0;
-          mode = "RMS";
-          preamp = 0.0;
-          reactivity = 10.0;
-          source = "Middle";
-          stereo-split-source = "Left/Right";
-          type = "Feed-forward";
         };
       };
 
