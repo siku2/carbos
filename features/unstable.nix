@@ -22,6 +22,7 @@
       opencode
       rust-analyzer
       secretspec
+      teams
       zed-editor
       ;
   };

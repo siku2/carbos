@@ -1,8 +1,8 @@
-{ unstable, fetchurl }:
+{ teams, fetchurl }:
 
 # nixpkgs lags behind the releases by months and its fixup phase breaks the
 # code signature.
-unstable.teams.overrideAttrs rec {
+teams.overrideAttrs rec {
   version = "26225.1708.5124.9749";
 
   src = fetchurl {
