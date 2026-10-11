@@ -79,6 +79,7 @@
           cli_default_open_behavior = "new_window";
           edit_predictions.provider = "copilot";
           git_panel.tree_view = true;
+          lsp.cargo-tom.initialization_options.hide_docs_info_message = true;
           lsp.eslint.binary = {
             path = lib.getExe' pkgs.vscode-langservers-extracted "vscode-eslint-language-server";
             arguments = [ "--stdio" ];
