@@ -172,10 +172,17 @@ in
     systemd.user.services.mic = {
       Unit = {
         Description = cfg.name;
-        After = [ "pipewire.service" ];
+        After = [
+          "pipewire.service"
+          "wireplumber.service"
+        ];
+        BindsTo = [ "pipewire.service" ];
         PartOf = [ "pipewire.service" ];
       };
-      Service.ExecStart = "${lib.getExe' pkgs.pipewire "pipewire"} -c ${conf}";
+      Service = {
+        ExecStart = "${lib.getExe' pkgs.pipewire "pipewire"} -c ${conf}";
+        Restart = "on-failure";
+      };
       Install.WantedBy = [ "default.target" ];
     };
   };
