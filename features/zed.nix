@@ -60,10 +60,13 @@
         mutableUserKeymaps = false;
         mutableUserSettings = false;
         extraPackages = [
+          pkgs.basedpyright
           pkgs.bash-language-server
+          pkgs.clang-tools
           pkgs.nil
           pkgs.nixd
           pkgs.package-version-server
+          pkgs.ruff
           pkgs.rust-analyzer
           pkgs.tailwindcss-language-server
           pkgs.vscode-langservers-extracted
