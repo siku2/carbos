@@ -1,9 +1,6 @@
 { inputs, pkgs, ... }:
 {
-  imports = with inputs.self.modules.darwin; [
-    packages
-    unstable
-  ];
+  imports = [ inputs.self.modules.darwin.packages ];
 
   nixpkgs = {
     hostPlatform = "aarch64-darwin";

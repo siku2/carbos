@@ -2,7 +2,6 @@
 {
   imports = [
     inputs.self.modules.nixos.packages
-    inputs.self.modules.nixos.unstable
     ./default-apps.nix
     ./desktop.nix
     ./fonts.nix

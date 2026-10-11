@@ -1,7 +1,7 @@
-{ lib, ... }:
+{ inputs, lib, ... }:
 let
-  # A file that takes its own name as an argument gets the nixpkgs version.
-  local =
+  # A file that takes its own name as an argument gets the package it replaces.
+  localPackages =
     final: prev:
     lib.mapAttrs' (
       file: _:
@@ -17,17 +17,23 @@ let
 
   # A local package only replaces its nixpkgs namesake on the platforms it
   # declares, so the darwin app bundles never shadow nixpkgs on Linux.
-  overlay =
+  local =
     final: prev:
     lib.mapAttrs (
       name: package:
       if lib.meta.availableOn prev.stdenv.hostPlatform package then package else prev.${name} or package
-    ) (local final prev);
+    ) (localPackages final prev);
 
-  packages.nixpkgs.overlays = [ overlay ];
+  # The local packages see the unstable pins as their namesakes.
+  composed = lib.composeManyExtensions [
+    inputs.self.overlays.unstable
+    local
+  ];
+
+  packages.nixpkgs.overlays = [ composed ];
 in
 {
-  flake.overlays.default = overlay;
+  flake.overlays.default = composed;
 
   flake.modules = {
     nixos.packages = packages;
