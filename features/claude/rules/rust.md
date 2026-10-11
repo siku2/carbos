@@ -61,11 +61,31 @@ underlying error with `#[source]`. Fields that hold data, such as the
 offending key or path, are fine. Don't flatten errors into strings with
 `.to_string()` or `format!`.
 
-## R9: use-before-mod
+## R9: code-structure
 
-`use` declarations always come before `mod` declarations. This holds even when
-importing from a local module. When referring to a local module, use the
-explicit `self::` prefix (e.g. `self::board::Foo`).
+- A module with submodules lives in `foo.rs` next to a `foo/` directory, never
+  in `foo/mod.rs`.
+- Items in modules and traits follow a fixed order: 1. modules 2. "use" 3. everything else
+- The visibility on a definition is its real visibility. An item that isn't
+  reachable from outside the crate is `pub(crate)`, not `pub`.
+
+Enforce this with lints in `Cargo.toml`. The full set varies per project, but
+these usually belong in it:
+
+```toml
+[workspace.lints.rust]
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+arbitrary_source_item_ordering = "warn"
+mod_module_files = "warn"
+```
+
+Limit the item ordering to modules and traits in `clippy.toml`:
+
+```toml
+source-item-ordering = ["module", "trait"]
+```
 
 ## R10: one-public-path
 
