@@ -16,6 +16,7 @@
     shell = pkgs.fish;
     extraGroups = [
       "wheel"
+      "dialout"
       "networkmanager"
       "input"
       # For the rtprio rlimit, so PipeWire clients go realtime without rtkit.
