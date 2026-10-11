@@ -48,6 +48,7 @@
 
     packages = with pkgs; [
       ansifilter
+      audacity
       bitwarden-cli
       bitwarden-desktop
       devcontainer
