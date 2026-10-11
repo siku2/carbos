@@ -19,10 +19,10 @@
     ./keyring.nix
     ./kicad
     ./mic/module.nix
-    ./rbw.nix
-    ./wallpaper.nix
     ./nextcloud.nix
     ./niri.nix
+    ./rbw.nix
+    ./wallpaper.nix
   ]
   ++ (with inputs.self.modules.homeManager; [
     claude-code
