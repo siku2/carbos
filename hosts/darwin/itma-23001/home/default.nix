@@ -43,6 +43,7 @@ in
   carbos.user = {
     fullName = "Simon Berger";
     email = "simon.berger@inomotech.com";
+    projectsDirectory = "/Volumes/Projects";
   };
 
   home = {
@@ -66,8 +67,6 @@ in
     bash.enable = true;
     gh.enable = true;
     gpg.enable = true;
-
-    direnv.config.whitelist.prefix = [ "/Volumes/Projects" ];
 
     nh = {
       enable = true;

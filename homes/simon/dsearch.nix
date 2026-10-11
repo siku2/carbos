@@ -21,7 +21,7 @@ let
         exclude_dirs = [ "Nextcloud" ];
       }
       {
-        path = "${config.home.homeDirectory}/Projects";
+        path = config.carbos.user.projectsDirectory;
         max_depth = 0;
         exclude_hidden = true;
         extract_exif = false;
