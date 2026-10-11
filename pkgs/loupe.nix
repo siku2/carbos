@@ -1,0 +1,35 @@
+{ loupe }:
+loupe.overrideAttrs (old: {
+  passthru = old.passthru or { } // {
+    desktopEntries = {
+      "org.gnome.Loupe" = [
+        "image/apng"
+        "image/bmp"
+        "image/gif"
+        "image/jp2"
+        "image/jpeg"
+        "image/png"
+        "image/qoi"
+        "image/tiff"
+        "image/vnd.microsoft.icon"
+        "image/webp"
+        "image/x-dds"
+        "image/x-exr"
+        "image/x-portable-anymap"
+        "image/x-portable-bitmap"
+        "image/x-portable-graymap"
+        "image/x-portable-pixmap"
+        "image/x-qoi"
+        "image/x-tga"
+        "image/x-win-bitmap"
+        "image/x-xbitmap"
+        "image/x-xpixmap"
+        "image/svg+xml"
+        "image/svg+xml-compressed"
+        "image/avif"
+        "image/heic"
+        "image/jxl"
+      ];
+    };
+  };
+})

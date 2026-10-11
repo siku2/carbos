@@ -35,5 +35,12 @@
   services.gvfs.enable = true;
   services.udisks2.enable = true;
 
+  carbos.defaultApps = {
+    decibels.mimeTypes = [ "audio/*" ];
+    loupe.mimeTypes = [ "image/*" ];
+    papers.mimeTypes = [ "application/pdf" ];
+    showtime.mimeTypes = [ "video/*" ];
+  };
+
   environment.sessionVariables.NIXOS_OZONE_WL = "1";
 }
