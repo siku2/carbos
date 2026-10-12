@@ -1,8 +1,29 @@
 { inputs, ... }:
 {
   flake.modules.homeManager.claude-code =
-    { pkgs, ... }:
+    { lib, pkgs, ... }:
     let
+      marketplace = lib.importJSON "${inputs.claude-plugins-official}/.claude-plugin/marketplace.json";
+
+      # Some marketplace plugins keep their manifest in marketplace.json and
+      # ship an empty directory, so --plugin-dir alone loads nothing.
+      pluginFromMarketplace =
+        name:
+        let
+          entry = lib.findFirst (p: p.name == name) (throw "no plugin ${name}") marketplace.plugins;
+        in
+        pkgs.writeTextFile {
+          inherit name;
+          destination = "/.claude-plugin/plugin.json";
+          text = builtins.toJSON (
+            removeAttrs entry [
+              "source"
+              "category"
+              "strict"
+            ]
+          );
+        };
+
       # No settings key exists for this. The flag only makes bypass mode
       # selectable, defaultMode below still decides how a session starts.
       claudeCodeAllowingBypass = pkgs.symlinkJoin {
@@ -23,7 +44,7 @@
         package = claudeCodeAllowingBypass;
         plugins = [
           "${inputs.claude-plugins-official}/plugins/frontend-design"
-          "${inputs.claude-plugins-official}/plugins/rust-analyzer-lsp"
+          (pluginFromMarketplace "rust-analyzer-lsp")
         ];
         context = ./claude/CLAUDE.md;
         rules = {
