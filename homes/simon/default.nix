@@ -7,6 +7,7 @@
 {
   imports = [
     ./ai.nix
+    ./ardour
     ./atuin.nix
     ./bitwarden.nix
     ./dms
@@ -48,7 +49,6 @@
 
     packages = with pkgs; [
       ansifilter
-      ardour
       bitwarden-cli
       bitwarden-desktop
       devcontainer
