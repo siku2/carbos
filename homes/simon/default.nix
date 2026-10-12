@@ -12,7 +12,6 @@
     ./dms
     ./dsearch.nix
     ./firefox.nix
-    ./fluidsynth.nix
     ./fractal.nix
     ./git.nix
     ./gtk.nix
@@ -49,7 +48,7 @@
 
     packages = with pkgs; [
       ansifilter
-      audacity
+      ardour
       bitwarden-cli
       bitwarden-desktop
       devcontainer
