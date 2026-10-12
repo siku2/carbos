@@ -1,6 +1,9 @@
 { inputs, pkgs, ... }:
 {
-  imports = [ inputs.self.modules.darwin.packages ];
+  imports = [
+    ./tailscale.nix
+    inputs.self.modules.darwin.packages
+  ];
 
   nixpkgs = {
     hostPlatform = "aarch64-darwin";
@@ -106,9 +109,6 @@
   };
 
   security.pam.services.sudo_local.touchIdAuth = true;
-
-  services.tailscale.enable = true;
-  environment.etc."resolver/inomo.tech".text = "nameserver 100.100.100.100";
 
   documentation.enable = false;
 
