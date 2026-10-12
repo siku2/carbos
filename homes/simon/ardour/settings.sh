@@ -28,3 +28,24 @@ while IFS=$'\t' read -r name node option value; do
   fi
 done < <(jq -r 'to_entries[] | .key as $file | .value | to_entries[] | .key as $node
   | .value | to_entries[] | [$file, $node, .key, .value] | @tsv' "$SETTINGS")
+
+[ -n "${ENGINE:-}" ] || exit 0
+
+file="$DIR/config"
+states=/Ardour/Extra/AudioMIDISetup/EngineStates
+backend=$(jq -r .backend "$ENGINE")
+active="count($states/State[@backend='$backend' and @active='1'])"
+[ "$(xmlstarlet sel -t -v "$active" "$file")" = 0 ] || exit 0
+
+xmlstarlet ed -L -d /Ardour/Extra/AudioMIDISetup "$file"
+if [ "$(xmlstarlet sel -t -v "count(/Ardour/Extra)" "$file")" = 0 ]; then
+  xmlstarlet ed -L -s /Ardour -t elem -n Extra "$file"
+fi
+xmlstarlet ed -L \
+  -s /Ardour/Extra -t elem -n AudioMIDISetup \
+  -s /Ardour/Extra/AudioMIDISetup -t elem -n EngineStates \
+  -s $states -t elem -n State \
+  -s $states/State -t elem -n MIDIDevices "$file"
+while IFS=$'\t' read -r name value; do
+  xmlstarlet ed -L -i $states/State -t attr -n "$name" -v "$value" "$file"
+done < <(jq -r 'to_entries[] | [.key, .value] | @tsv' "$ENGINE")

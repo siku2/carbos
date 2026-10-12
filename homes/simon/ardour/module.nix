@@ -38,6 +38,23 @@ let
     };
   };
 
+  # The JACK backend ignores the device fields when the server already runs.
+  engine = json.generate "ardour-engine.json" {
+    backend = "JACK/Pipewire";
+    driver = "";
+    device = "";
+    input-device = "";
+    output-device = "";
+    sample-rate = "48000";
+    buffer-size = "1024";
+    n-periods = "0";
+    input-latency = "0";
+    output-latency = "0";
+    active = "1";
+    use-buffered-io = "0";
+    midi-option = "";
+  };
+
   plugins = pkgs.buildEnv {
     name = "ardour-plugins";
     paths = cfg.plugins;
@@ -87,6 +104,15 @@ in
       clipLibraryDir = setting types.str "The folder clips are added to.";
     };
 
+    engine.jack = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Start on PipeWire's JACK server without showing the Audio/MIDI setup
+        dialog.
+      '';
+    };
+
     appearance.fontScale = setting types.ints.positive ''
       GUI and font scaling in percent. The first-run wizard guesses it from
       the display.
@@ -104,6 +130,7 @@ in
     home.activation.ardourSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       DIR=${lib.escapeShellArg configDir} \
       SETTINGS=${json.generate "ardour-settings.json" files} \
+      ENGINE=${lib.optionalString cfg.engine.jack engine} \
       run ${lib.getExe merge}
     '';
   };
