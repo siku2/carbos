@@ -43,7 +43,10 @@
       home.packages = [
         zedCli
         zedPager
-      ];
+      ]
+      # On macOS Zed starts from the app bundle, so the extraPackages wrapper
+      # never sets its PATH.
+      ++ lib.optionals pkgs.stdenv.hostPlatform.isDarwin config.programs.zed-editor.extraPackages;
 
       # Zed has no setting to stop language server downloads. A read-only
       # download directory makes them fail, so only servers from PATH run.
