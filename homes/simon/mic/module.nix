@@ -134,6 +134,9 @@ let
               "node.passive" = true;
               # The fallback would be this chain itself.
               "node.dont-fallback" = true;
+              # Without it WirePlumber destroys the stream if the device
+              # appears later, and the chain unloads itself.
+              "node.linger" = true;
             };
             "playback.props" = {
               "node.name" = "mic";
