@@ -67,7 +67,7 @@ in
         // Ctrl-click is hard-coded to open a tab and the policy rejects the
         // middlemouse prefix. Rewriting the decision covers links, bookmarks
         // and the URL bar alike.
-        defaultPref("middlemouse.openNewWindow", true);
+        lockPref("middlemouse.openNewWindow", true);
         try {
           const { BrowserUtils } = ChromeUtils.importESModule("resource://gre/modules/BrowserUtils.sys.mjs");
           const whereToOpenLink = BrowserUtils.whereToOpenLink;
@@ -125,35 +125,35 @@ in
         # window features are unaffected by open_newwindow.restriction = 2.
         "browser.link.open_newwindow" = {
           Value = 2;
-          Status = "default";
+          Status = "locked";
         };
         "browser.tabs.opentabfor.middleclick" = {
           Value = false;
-          Status = "default";
+          Status = "locked";
         };
         "dom.ipc.processCount" = {
           Value = 4;
-          Status = "default";
+          Status = "locked";
         };
         "browser.tabs.unloadOnLowMemory" = {
           Value = true;
-          Status = "default";
+          Status = "locked";
         };
         "browser.sessionhistory.max_total_viewers" = {
           Value = 2;
-          Status = "default";
+          Status = "locked";
         };
         "browser.newtabpage.activity-stream.showWeather" = {
           Value = false;
-          Status = "default";
+          Status = "locked";
         };
         "browser.startup.page" = {
           Value = 1;
-          Status = "default";
+          Status = "locked";
         };
         "browser.warnOnQuitShortcut" = {
           Value = false;
-          Status = "default";
+          Status = "locked";
         };
       };
 
