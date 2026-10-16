@@ -47,7 +47,10 @@
             forceSignAnnotated = true;
             sort = "version:refname";
           };
-          branch.sort = "-committerdate";
+          branch = {
+            sort = "-committerdate";
+            autoSetupMerge = "simple";
+          };
           status.showUntrackedFiles = "all";
           column.ui = "auto";
           help.autocorrect = "prompt";
