@@ -173,3 +173,7 @@ include optional=true "dms/outputs.kdl"
 include optional=true "dms/cursor.kdl"
 include optional=true "dms/input.kdl"
 include optional=true "dms/windowrules.kdl"
+
+binds {
+    Mod+Alt+F { toggle-windowed-fullscreen; }
+}
