@@ -1,4 +1,9 @@
-{ lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 {
   # DMS's matugen writes dank-colors.css on every theme change, but nothing
   # pulls it in on its own.
@@ -7,6 +12,10 @@
     colorScheme = "dark";
     gtk2.enable = false;
     gtk3.extraCss = ''@import "dank-colors.css";'';
+    gtk3.bookmarks = map (dir: "file://${dir}") [
+      config.carbos.user.projectsDirectory
+      "${config.home.homeDirectory}/Downloads"
+    ];
     gtk4.extraCss = ''@import "dank-colors.css";'';
     # home-manager writes the enum's number, but GTK only parses its nick.
     gtk4.extraConfig.gtk-interface-color-scheme = "dark";
