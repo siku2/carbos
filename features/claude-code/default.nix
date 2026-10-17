@@ -1,7 +1,7 @@
 { inputs, ... }:
 let
   managedSettings = {
-    imports = [ ./claude/managed-settings.nix ];
+    imports = [ ./managed-settings.nix ];
     carbos.claudeCode.managedSettings.strictKnownMarketplaces = [ { source = "skills-dir"; } ];
   };
 in
@@ -70,12 +70,12 @@ in
           "${inputs.claude-plugins-official}/plugins/frontend-design"
           (pluginFromMarketplace "rust-analyzer-lsp")
         ];
-        context = ./claude/CLAUDE.md;
+        context = ./CLAUDE.md;
         rules = {
-          cargo = ./claude/rules/cargo.md;
-          rust = ./claude/rules/rust.md;
+          cargo = ./rules/cargo.md;
+          rust = ./rules/rust.md;
         };
-        skills.create-pr = ./claude/skills/create-pr.md;
+        skills.create-pr = ./skills/create-pr.md;
         settings = {
           attribution = {
             commit = "";
