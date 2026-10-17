@@ -1,0 +1,69 @@
+--- a/Modals/PowerMenuModal.qml
++++ b/Modals/PowerMenuModal.qml
+@@ -39,7 +39,7 @@
+     signal lockRequested
+ 
+     function actionNeedsConfirm(action) {
+-        return action !== "lock" && action !== "restart";
++        return action !== "lock" && action !== "restart" && action !== "monitorsoff";
+     }
+ 
+     function startHold(action, actionIndex) {
+@@ -92,6 +92,11 @@
+             Quickshell.execDetached(["dms", "restart"]);
+             return;
+         }
++        if (action === "monitorsoff") {
++            close();
++            CompositorService.powerOffMonitors();
++            return;
++        }
+         close();
+         root.powerActionRequested(action, "", "");
+     }
+@@ -216,6 +221,12 @@
+                 "label": I18n.tr("Restart DMS"),
+                 "key": "D"
+             };
++        case "monitorsoff":
++            return {
++                "icon": "desktop_access_disabled",
++                "label": I18n.tr("Monitors Off"),
++                "key": "M"
++            };
+         default:
+             return {
+                 "icon": "help",
+@@ -379,6 +390,10 @@
+             startHold("restart", visibleActions.indexOf("restart"));
+             event.accepted = true;
+             break;
++        case Qt.Key_M:
++            startHold("monitorsoff", visibleActions.indexOf("monitorsoff"));
++            event.accepted = true;
++            break;
+         }
+     }
+ 
+@@ -475,6 +490,10 @@
+             startHold("restart", visibleActions.indexOf("restart"));
+             event.accepted = true;
+             break;
++        case Qt.Key_M:
++            startHold("monitorsoff", visibleActions.indexOf("monitorsoff"));
++            event.accepted = true;
++            break;
+         }
+     }
+ 
+--- a/Modules/Lock/LockPowerMenu.qml
++++ b/Modules/Lock/LockPowerMenu.qml
+@@ -44,7 +44,7 @@
+                 return false;
+             if (action === "lock")
+                 return false;
+-            if (action === "restart")
++            if (action === "restart" || action === "monitorsoff")
+                 return false;
+             if (action === "logout" && !showLogout)
+                 return false;

@@ -6,6 +6,15 @@
       appIdSubstitutions = [ ];
       controlCenterShowMicPercent = true;
       osdPowerProfileEnabled = true;
+      powerMenuActions = [
+        "reboot"
+        "logout"
+        "poweroff"
+        "lock"
+        "monitorsoff"
+        "suspend"
+        "restart"
+      ];
     };
 
     bars.default = {
