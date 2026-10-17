@@ -32,7 +32,7 @@ in
       # Some marketplace plugins keep their manifest in marketplace.json and
       # ship an empty directory, so --plugin-dir alone loads nothing.
       pluginFromMarketplace =
-        name:
+        name: overrides:
         let
           entry = lib.findFirst (p: p.name == name) (throw "no plugin ${name}") marketplace.plugins;
         in
@@ -40,7 +40,7 @@ in
           inherit name;
           destination = "/.claude-plugin/plugin.json";
           text = builtins.toJSON (
-            removeAttrs entry [
+            removeAttrs (lib.recursiveUpdate entry overrides) [
               "source"
               "category"
               "strict"
@@ -57,7 +57,14 @@ in
         postBuild = ''
           wrapProgram $out/bin/claude \
             --inherit-argv0 \
-            --add-flags --allow-dangerously-skip-permissions
+            --add-flags --allow-dangerously-skip-permissions \
+            --suffix PATH : ${
+              lib.makeBinPath [
+                pkgs.basedpyright
+                pkgs.rust-analyzer
+                pkgs.vtsls
+              ]
+            }
         '';
         inherit (pkgs.claude-code) meta;
       };
@@ -68,7 +75,13 @@ in
         package = claudeCodeAllowingBypass;
         plugins = [
           "${inputs.claude-plugins-official}/plugins/frontend-design"
-          (pluginFromMarketplace "rust-analyzer-lsp")
+          (pluginFromMarketplace "pyright-lsp" {
+            lspServers.pyright.command = "basedpyright-langserver";
+          })
+          (pluginFromMarketplace "rust-analyzer-lsp" { })
+          (pluginFromMarketplace "typescript-lsp" {
+            lspServers.typescript.command = "vtsls";
+          })
         ];
         context = ./CLAUDE.md;
         rules = {
