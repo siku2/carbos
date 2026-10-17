@@ -2,6 +2,7 @@
 {
   imports = [
     ./tailscale.nix
+    inputs.self.modules.darwin.claude-code
     inputs.self.modules.darwin.packages
   ];
 

@@ -1,5 +1,29 @@
 { inputs, ... }:
+let
+  managedSettings = {
+    imports = [ ./claude/managed-settings.nix ];
+    carbos.claudeCode.managedSettings.strictKnownMarketplaces = [ { source = "skills-dir"; } ];
+  };
+in
 {
+  flake.modules.nixos.claude-code =
+    { config, ... }:
+    {
+      imports = [ managedSettings ];
+      environment.etc."claude-code/managed-settings.json".source =
+        config.carbos.claudeCode.managedSettings;
+    };
+
+  flake.modules.darwin.claude-code =
+    { config, ... }:
+    {
+      imports = [ managedSettings ];
+      system.activationScripts.postActivation.text = ''
+        mkdir -p "/Library/Application Support/ClaudeCode"
+        cp ${config.carbos.claudeCode.managedSettings} "/Library/Application Support/ClaudeCode/managed-settings.json"
+      '';
+    };
+
   flake.modules.homeManager.claude-code =
     { lib, pkgs, ... }:
     let
