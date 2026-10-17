@@ -2,7 +2,13 @@
 let
   dir = ../features;
 
-  isFeature = name: type: type == "regular" && lib.hasSuffix ".nix" name && !lib.hasPrefix "_" name;
+  isFeature =
+    name: type:
+    !lib.hasPrefix "_" name
+    && (
+      (type == "regular" && lib.hasSuffix ".nix" name)
+      || (type == "directory" && builtins.pathExists (dir + "/${name}/default.nix"))
+    );
 
   files = lib.attrNames (lib.filterAttrs isFeature (builtins.readDir dir));
 in
