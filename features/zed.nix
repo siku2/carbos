@@ -16,6 +16,7 @@
         nix
         sql
         toml
+        wgsl-wesl
         xml
       ];
 
@@ -74,6 +75,7 @@
           pkgs.tailwindcss-language-server
           pkgs.vscode-langservers-extracted
           pkgs.vtsls
+          pkgs.wgsl-analyzer
           pkgs.yaml-language-server
         ];
         userSettings = {
