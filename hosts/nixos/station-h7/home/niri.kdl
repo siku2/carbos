@@ -17,6 +17,11 @@ layout {
     default-column-width { proportion 0.25; }
 }
 
+// Real fullscreen at 32:9 is unusable. Mod+Shift+F still gives it.
+window-rule {
+    prefer-windowed-fullscreen true
+}
+
 window-rule {
     match app-id=r#"^gamescope$"#
     match app-id=r#"^steam_app_\d+$"#
