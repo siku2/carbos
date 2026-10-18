@@ -1,8 +1,32 @@
 {
   flake.modules.homeManager.git =
-    { config, ... }:
     {
-      imports = [ ./_options.nix ];
+      config,
+      lib,
+      pkgs,
+      ...
+    }:
+    let
+      git = config.programs.git.package;
+
+      script =
+        name: runtimeInputs:
+        pkgs.writeShellApplication {
+          inherit name runtimeInputs;
+          text = builtins.readFile ./${name}.sh;
+        };
+
+      listDeadBranches = script "list-dead-branches" [
+        git
+        pkgs.gawk
+      ];
+      pruneDeadBranches = script "prune-dead-branches" [
+        git
+        listDeadBranches
+      ];
+    in
+    {
+      imports = [ ../_options.nix ];
 
       programs.git = {
         enable = true;
@@ -10,8 +34,8 @@
 
         settings = {
           alias = {
-            list-dead-branches = "!git for-each-ref --format='%(refname:short) %(upstream:track)' refs/heads | awk '$2 == \"[gone]\" {print $1}'";
-            prune-dead-branches = "!f() { git fetch --prune && git list-dead-branches | while read branch; do git branch -D \"$branch\"; done; }; f";
+            list-dead-branches = "!${lib.getExe listDeadBranches}";
+            prune-dead-branches = "!${lib.getExe pruneDeadBranches}";
           };
 
           user = {
