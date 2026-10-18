@@ -24,6 +24,10 @@
         git
         listDeadBranches
       ];
+      pullBranch = script "pull-branch" [
+        git
+        pkgs.coreutils
+      ];
     in
     {
       imports = [ ../_options.nix ];
@@ -36,6 +40,7 @@
           alias = {
             list-dead-branches = "!${lib.getExe listDeadBranches}";
             prune-dead-branches = "!${lib.getExe pruneDeadBranches}";
+            pull-branch = "!${lib.getExe pullBranch}";
           };
 
           user = {
