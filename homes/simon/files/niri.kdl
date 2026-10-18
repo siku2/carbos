@@ -176,6 +176,7 @@ include optional=true "dms/windowrules.kdl"
 
 binds {
     Mod+Alt+F { toggle-windowed-fullscreen; }
+    Mod+Alt+R { switch-preset-column-width-back; }
     // Too close to Mod+Q, and apps treat it as quit.
     Ctrl+Q { spawn "true"; }
 }
