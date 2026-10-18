@@ -29,6 +29,7 @@
     cli
     codex
     direnv
+    gh
     git
     rust
     starship
@@ -54,7 +55,6 @@
       devcontainer
       file-roller
       forgejo-cli
-      gh
       git-credential-manager
       inkscape
       libsecret

@@ -17,10 +17,6 @@ in
         helper = "manager";
         credentialstore = "secretservice";
         "https://forge.stargrid.systems".provider = "generic";
-        "https://github.com".helper = [
-          ""
-          "!gh auth git-credential"
-        ];
       };
     };
 

@@ -33,6 +33,7 @@ in
     cli
     codex
     direnv
+    gh
     git
     rdp
     rust
@@ -65,7 +66,6 @@ in
 
   programs = {
     bash.enable = true;
-    gh.enable = true;
     gpg.enable = true;
 
     nh = {
