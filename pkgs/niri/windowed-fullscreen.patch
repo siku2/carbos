@@ -1,0 +1,354 @@
+diff --git a/docs/wiki/Configuration:-Window-Rules.md b/docs/wiki/Configuration:-Window-Rules.md
+index f8fa215..96649fc 100644
+--- a/docs/wiki/Configuration:-Window-Rules.md
++++ b/docs/wiki/Configuration:-Window-Rules.md
+@@ -46,6 +46,7 @@ window-rule {
+     open-maximized true
+     open-maximized-to-edges true
+     open-fullscreen true
++    open-windowed-fullscreen true
+     open-floating true
+     open-focused false
+ 
+@@ -54,6 +55,7 @@ window-rule {
+     opacity 0.5
+     block-out-from "screencast"
+     // block-out-from "screen-capture"
++    prefer-windowed-fullscreen true
+     variable-refresh-rate true
+     default-column-display "tabbed"
+     default-floating-position x=100 y=200 relative-to="bottom-left"
+@@ -617,6 +619,30 @@ window-rule {
+ }
+ ```
+ 
++#### `prefer-windowed-fullscreen`
++
++Turn fullscreen into [windowed fullscreen](./Fullscreen-and-Maximize.md#windowed-fullscreen) for this window.
++The window is told that it is fullscreen, but it keeps its tile size.
++
++This applies to fullscreen requests from the window, both before and after it opens, and to `open-fullscreen true`.
++The `fullscreen-window` action still makes the window truly fullscreen.
++
++`open-windowed-fullscreen true` opens the window in windowed fullscreen and also turns this on.
++
++```kdl
++window-rule {
++    match app-id=r#"^steam_app_"#
++
++    prefer-windowed-fullscreen true
++}
++
++window-rule {
++    match app-id="^vesktop$"
++
++    open-windowed-fullscreen true
++}
++```
++
+ #### `variable-refresh-rate`
+ 
+ <sup>Since: 0.1.9</sup>
+diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
+index 329b766..f3516bc 100644
+--- a/niri-config/src/lib.rs
++++ b/niri-config/src/lib.rs
+@@ -1784,6 +1784,7 @@ mod tests {
+                     open_fullscreen: Some(
+                         false,
+                     ),
++                    open_windowed_fullscreen: None,
+                     open_floating: Some(
+                         false,
+                     ),
+@@ -1855,6 +1856,7 @@ mod tests {
+                     clip_to_geometry: None,
+                     baba_is_float: None,
+                     block_out_from: None,
++                    prefer_windowed_fullscreen: None,
+                     variable_refresh_rate: None,
+                     default_column_display: Some(
+                         Tabbed,
+diff --git a/niri-config/src/window_rule.rs b/niri-config/src/window_rule.rs
+index f2bc2ad..c97d2be 100644
+--- a/niri-config/src/window_rule.rs
++++ b/niri-config/src/window_rule.rs
+@@ -31,6 +31,8 @@ pub struct WindowRule {
+     #[knuffel(child, unwrap(argument))]
+     pub open_fullscreen: Option<bool>,
+     #[knuffel(child, unwrap(argument))]
++    pub open_windowed_fullscreen: Option<bool>,
++    #[knuffel(child, unwrap(argument))]
+     pub open_floating: Option<bool>,
+     #[knuffel(child, unwrap(argument))]
+     pub open_focused: Option<bool>,
+@@ -66,6 +68,8 @@ pub struct WindowRule {
+     #[knuffel(child, unwrap(argument))]
+     pub block_out_from: Option<BlockOutFrom>,
+     #[knuffel(child, unwrap(argument))]
++    pub prefer_windowed_fullscreen: Option<bool>,
++    #[knuffel(child, unwrap(argument))]
+     pub variable_refresh_rate: Option<bool>,
+     #[knuffel(child, unwrap(argument, str))]
+     pub default_column_display: Option<ColumnDisplay>,
+diff --git a/src/handlers/xdg_shell.rs b/src/handlers/xdg_shell.rs
+index 38440c9..503ac5b 100644
+--- a/src/handlers/xdg_shell.rs
++++ b/src/handlers/xdg_shell.rs
+@@ -41,7 +41,7 @@ use crate::input::move_grab::MoveGrab;
+ use crate::input::resize_grab::ResizeGrab;
+ use crate::input::touch_resize_grab::TouchResizeGrab;
+ use crate::input::{PointerOrTouchStartData, DOUBLE_CLICK_TIME};
+-use crate::layout::ActivateWindow;
++use crate::layout::{ActivateWindow, LayoutElement};
+ use crate::niri::{CastTarget, PopupGrabState, State};
+ use crate::utils::transaction::Transaction;
+ use crate::utils::{
+@@ -624,6 +624,8 @@ impl XdgShellHandler for State {
+             mapped.set_needs_configure();
+ 
+             let window = mapped.window.clone();
++            let prefer_windowed = mapped.rules().prefer_windowed_fullscreen == Some(true)
++                && !mapped.pending_sizing_mode().is_fullscreen();
+ 
+             if let Some(requested_output) = requested_output {
+                 if Some(&requested_output) != current_output {
+@@ -636,7 +638,11 @@ impl XdgShellHandler for State {
+                 }
+             }
+ 
+-            self.niri.layout.set_fullscreen(&window, true);
++            if prefer_windowed {
++                self.niri.layout.set_windowed_fullscreen(&window, true);
++            } else {
++                self.niri.layout.set_fullscreen(&window, true);
++            }
+         } else if let Some(unmapped) = self.niri.unmapped_windows.get_mut(toplevel.wl_surface()) {
+             match &mut unmapped.state {
+                 InitialConfigureState::NotConfigured {
+@@ -686,7 +692,9 @@ impl XdgShellHandler for State {
+                             state.states.set(xdg_toplevel::State::Fullscreen);
+                             state.states.unset(xdg_toplevel::State::Maximized);
+                         });
+-                        ws.configure_new_window(&unmapped.window, None, None, false, rules);
++                        if rules.prefer_windowed_fullscreen != Some(true) {
++                            ws.configure_new_window(&unmapped.window, None, None, false, rules);
++                        }
+                     }
+ 
+                     // We already sent the initial configure, so we need to reconfigure.
+@@ -1127,9 +1135,12 @@ impl State {
+             is_pending_maximized = (*wants_maximized && rules.open_maximized_to_edges.is_none())
+                 || rules.open_maximized_to_edges == Some(true);
+ 
+-            if (wants_fullscreen.is_some() && rules.open_fullscreen.is_none())
+-                || rules.open_fullscreen == Some(true)
+-            {
++            let open_fullscreen = (wants_fullscreen.is_some() && rules.open_fullscreen.is_none())
++                || rules.open_fullscreen == Some(true);
++            let open_windowed_fullscreen =
++                open_fullscreen && rules.prefer_windowed_fullscreen == Some(true);
++
++            if open_fullscreen && !open_windowed_fullscreen {
+                 toplevel.with_pending_state(|state| {
+                     state.states.set(xdg_toplevel::State::Fullscreen);
+                 });
+@@ -1159,6 +1170,13 @@ impl State {
+                 is_floating,
+                 &rules,
+             );
++
++            if open_windowed_fullscreen {
++                toplevel.with_pending_state(|state| {
++                    state.states.set(xdg_toplevel::State::Fullscreen);
++                    state.states.unset(xdg_toplevel::State::Maximized);
++                });
++            }
+         }
+ 
+         // Set the tiled state for the initial configure.
+diff --git a/src/layout/mod.rs b/src/layout/mod.rs
+index 5c4dd63..05c4019 100644
+--- a/src/layout/mod.rs
++++ b/src/layout/mod.rs
+@@ -3538,6 +3538,12 @@ impl<W: LayoutElement> Layout<W> {
+     }
+ 
+     pub fn toggle_windowed_fullscreen(&mut self, id: &W::Id) {
++        let (_, window) = self.windows().find(|(_, win)| win.id() == id).unwrap();
++        let value = !window.is_pending_windowed_fullscreen();
++        self.set_windowed_fullscreen(id, value);
++    }
++
++    pub fn set_windowed_fullscreen(&mut self, id: &W::Id, value: bool) {
+         let (_, window) = self.windows().find(|(_, win)| win.id() == id).unwrap();
+         if window.pending_sizing_mode().is_fullscreen() {
+             // Remove the real fullscreen.
+@@ -3552,7 +3558,7 @@ impl<W: LayoutElement> Layout<W> {
+         // This will switch is_pending_fullscreen() to false right away.
+         self.with_windows_mut(|window, _| {
+             if window.id() == id {
+-                window.request_windowed_fullscreen(!window.is_pending_windowed_fullscreen());
++                window.request_windowed_fullscreen(value);
+             }
+         });
+     }
+diff --git a/src/tests/fullscreen.rs b/src/tests/fullscreen.rs
+index b12e875..9262c9d 100644
+--- a/src/tests/fullscreen.rs
++++ b/src/tests/fullscreen.rs
+@@ -155,6 +155,101 @@ fn windowed_fullscreen_chain() {
+     );
+ }
+ 
++#[test]
++fn prefer_windowed_fullscreen() {
++    let config = niri_config::Config::parse_mem(
++        "window-rule {
++            prefer-windowed-fullscreen true
++        }",
++    )
++    .unwrap();
++    let mut f = Fixture::with_config(config);
++    f.add_output(1, (1920, 1080));
++
++    let id = f.add_client();
++    let window = f.client(id).create_window();
++    let surface = window.surface.clone();
++    window.set_fullscreen(None);
++    window.commit();
++    f.roundtrip(id);
++
++    let window = f.client(id).window(&surface);
++    assert_snapshot!(
++        window.format_recent_configures(),
++        @"size: 936 × 1048, bounds: 1888 × 1048, states: [Fullscreen]"
++    );
++    window.attach_new_buffer();
++    window.set_size(936, 1048);
++    window.ack_last_and_commit();
++    f.double_roundtrip(id);
++
++    let get_state = |f: &mut Fixture| {
++        let mapped = f.niri().layout.windows().next().unwrap().1;
++        format!(
++            "fs {}, wfs {}",
++            mapped.sizing_mode().is_fullscreen(),
++            mapped.is_windowed_fullscreen()
++        )
++    };
++    assert_snapshot!(get_state(&mut f), @"fs false, wfs true");
++
++    let _ = f.client(id).window(&surface).recent_configures();
++    f.client(id).window(&surface).set_fullscreen(None);
++    f.double_roundtrip(id);
++    let window = f.client(id).window(&surface);
++    assert_snapshot!(
++        window.format_recent_configures(),
++        @"size: 936 × 1048, bounds: 1888 × 1048, states: [Fullscreen, Activated]"
++    );
++    window.ack_last_and_commit();
++    f.roundtrip(id);
++    assert_snapshot!(get_state(&mut f), @"fs false, wfs true");
++
++    f.client(id).window(&surface).unset_fullscreen();
++    f.double_roundtrip(id);
++    let window = f.client(id).window(&surface);
++    assert_snapshot!(
++        window.format_recent_configures(),
++        @"size: 936 × 1048, bounds: 1888 × 1048, states: [Activated]"
++    );
++    window.ack_last_and_commit();
++    f.roundtrip(id);
++    assert_snapshot!(get_state(&mut f), @"fs false, wfs false");
++}
++
++#[test]
++fn open_windowed_fullscreen() {
++    let config = niri_config::Config::parse_mem(
++        "window-rule {
++            open-windowed-fullscreen true
++        }",
++    )
++    .unwrap();
++    let mut f = Fixture::with_config(config);
++    f.add_output(1, (1920, 1080));
++
++    let id = f.add_client();
++    let window = f.client(id).create_window();
++    let surface = window.surface.clone();
++    window.commit();
++    f.roundtrip(id);
++
++    let window = f.client(id).window(&surface);
++    assert_snapshot!(
++        window.format_recent_configures(),
++        @"size: 936 × 1048, bounds: 1888 × 1048, states: [Fullscreen]"
++    );
++    window.attach_new_buffer();
++    window.set_size(936, 1048);
++    window.ack_last_and_commit();
++    f.double_roundtrip(id);
++
++    let mapped = f.niri().layout.windows().next().unwrap().1;
++    assert!(!mapped.sizing_mode().is_fullscreen());
++    assert!(mapped.is_windowed_fullscreen());
++    assert_eq!(mapped.rules().prefer_windowed_fullscreen, Some(true));
++}
++
+ #[test]
+ fn unfullscreen_before_fullscreen_ack_doesnt_prevent_view_offset_save_restore() {
+     let (mut f, id, _surface) = set_up();
+diff --git a/src/window/mapped.rs b/src/window/mapped.rs
+index 3db1f66..a3e8215 100644
+--- a/src/window/mapped.rs
++++ b/src/window/mapped.rs
+@@ -310,6 +310,11 @@ impl Mapped {
+             focus_timestamp: None,
+         };
+ 
++        if rv.rules.prefer_windowed_fullscreen == Some(true) {
++            rv.is_windowed_fullscreen = rv.sizing_mode().is_fullscreen();
++            rv.is_pending_windowed_fullscreen = rv.pending_sizing_mode().is_fullscreen();
++        }
++
+         rv.is_maximized = rv.sizing_mode().is_maximized();
+         rv.is_pending_maximized = rv.pending_sizing_mode().is_maximized();
+ 
+diff --git a/src/window/mod.rs b/src/window/mod.rs
+index 14527cd..6c2e9fb 100644
+--- a/src/window/mod.rs
++++ b/src/window/mod.rs
+@@ -111,6 +111,8 @@ pub struct ResolvedWindowRules {
+     /// Whether to block out this window from certain render targets.
+     pub block_out_from: Option<BlockOutFrom>,
+ 
++    pub prefer_windowed_fullscreen: Option<bool>,
++
+     /// Whether to enable VRR on this window's primary output if it is on-demand.
+     pub variable_refresh_rate: Option<bool>,
+ 
+@@ -249,6 +251,13 @@ impl ResolvedWindowRules {
+                     resolved.open_fullscreen = Some(x);
+                 }
+ 
++                if let Some(x) = rule.open_windowed_fullscreen {
++                    resolved.open_fullscreen = Some(x);
++                    if x {
++                        resolved.prefer_windowed_fullscreen = Some(true);
++                    }
++                }
++
+                 if let Some(x) = rule.open_floating {
+                     resolved.open_floating = Some(x);
+                 }
+@@ -293,6 +302,9 @@ impl ResolvedWindowRules {
+                 if let Some(x) = rule.block_out_from {
+                     resolved.block_out_from = Some(x);
+                 }
++                if let Some(x) = rule.prefer_windowed_fullscreen {
++                    resolved.prefer_windowed_fullscreen = Some(x);
++                }
+                 if let Some(x) = rule.variable_refresh_rate {
+                     resolved.variable_refresh_rate = Some(x);
+                 }
