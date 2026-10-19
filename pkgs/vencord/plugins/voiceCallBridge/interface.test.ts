@@ -2,8 +2,9 @@ import { execFile } from "node:child_process";
 import { it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { needsVarlinkctl } from "@carbos/varlink/testing";
 
-it("has a valid interface description", async () => {
+it("has a valid interface description", needsVarlinkctl, async () => {
   const file = fileURLToPath(
     new URL("io.siku2.VoiceCall.varlink", import.meta.url),
   );

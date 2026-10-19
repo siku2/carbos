@@ -32,9 +32,9 @@ stdenvNoCC.mkDerivation {
     nodejs
     workspace.pnpm
     pnpmConfigHook
-    # varlinkctl, the reference client for the varlink tests.
-    systemdMinimal
-  ];
+  ]
+  # varlinkctl, the reference client for the varlink tests.
+  ++ lib.optional stdenvNoCC.hostPlatform.isLinux systemdMinimal;
 
   doCheck = true;
   checkPhase = ''

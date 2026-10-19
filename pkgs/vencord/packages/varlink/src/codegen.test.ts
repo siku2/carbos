@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
 import { it } from "node:test";
-import { promisify } from "node:util";
 import {
   description,
   errors,
@@ -9,7 +7,7 @@ import {
   type Thing,
 } from "./fixtures/io.example.Fixture.varlink.ts";
 import { VarlinkServer } from "./server.ts";
-import { tempSocket } from "./testing.ts";
+import { needsVarlinkctl, tempSocket, varlinkctl } from "./testing.ts";
 
 const thing: Thing = {
   flag: true,
@@ -57,7 +55,7 @@ it("embeds the description verbatim", async () => {
   assert.equal(description, source);
 });
 
-it("serves the generated interface", async () => {
+it("serves the generated interface", needsVarlinkctl, async () => {
   await using socket = await tempSocket();
   const server = new VarlinkServer({
     info: { vendor: "", product: "", version: "", url: "" },
@@ -65,9 +63,7 @@ it("serves the generated interface", async () => {
   });
   await server.listen(socket.path);
 
-  const varlinkctl = (...args: string[]) =>
-    promisify(execFile)("varlinkctl", ["--json=short", ...args]);
-  const { stdout } = await varlinkctl(
+  const stdout = await varlinkctl(
     "call",
     socket.path,
     "io.example.Fixture.Get",

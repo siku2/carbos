@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
 import { link, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { describe, it } from "node:test";
-import { promisify } from "node:util";
 import { VarlinkError } from "./errors.ts";
 import { defineInterface } from "./interface.ts";
 import { VarlinkServer } from "./server.ts";
-import { TestClient, tempSocket, untilAborted } from "./testing.ts";
+import {
+  needsVarlinkctl,
+  TestClient,
+  tempSocket,
+  untilAborted,
+  varlinkctl,
+} from "./testing.ts";
 
 const info = {
   vendor: "carbos",
@@ -297,10 +301,7 @@ describe("VarlinkServer", () => {
   });
 });
 
-describe("varlinkctl", () => {
-  const varlinkctl = async (...args: string[]) =>
-    (await promisify(execFile)("varlinkctl", ["--json=short", ...args])).stdout;
-
+describe("varlinkctl", needsVarlinkctl, () => {
   it("introspects every interface", async () => {
     await using s = await serve();
     const { interfaces } = JSON.parse(await varlinkctl("info", s.path));

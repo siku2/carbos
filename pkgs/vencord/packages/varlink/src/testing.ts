@@ -1,7 +1,9 @@
+import { execFile } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createConnection, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { encode, MessageReader } from "./protocol.ts";
 
 /** A raw client, so tests can do what well-behaved clients never would. */
@@ -76,3 +78,11 @@ export function untilAborted(signal: AbortSignal): Promise<never> {
     });
   });
 }
+
+export const varlinkctl = async (...args: string[]): Promise<string> =>
+  (await promisify(execFile)("varlinkctl", ["--json=short", ...args])).stdout;
+
+/** Options for tests that run varlinkctl, which ships with systemd. */
+export const needsVarlinkctl = {
+  skip: process.platform === "linux" ? false : "varlinkctl is Linux-only",
+};

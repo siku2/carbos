@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
 import { describe, it } from "node:test";
-import { promisify } from "node:util";
 import { VarlinkServer } from "@carbos/varlink";
-import { TestClient, tempSocket } from "@carbos/varlink/testing";
+import {
+  needsVarlinkctl,
+  TestClient,
+  tempSocket,
+  varlinkctl,
+} from "@carbos/varlink/testing";
 import { Feed } from "./feed.ts";
 import type { Participant, State } from "./io.siku2.VoiceCall.varlink.ts";
 import { voiceCall } from "./service.ts";
@@ -54,20 +57,21 @@ async function serve(initial?: State) {
   };
 }
 
-const varlinkctl = async (...args: string[]) =>
-  (await promisify(execFile)("varlinkctl", ["--json=short", ...args])).stdout;
-
 describe("io.siku2.VoiceCall", () => {
-  it("replies with the state the schema describes", async () => {
-    await using s = await serve(inCall);
-    const reply = await varlinkctl(
-      "call",
-      s.path,
-      "io.siku2.VoiceCall.Watch",
-      "{}",
-    );
-    assert.deepEqual(JSON.parse(reply), { state: inCall });
-  });
+  it(
+    "replies with the state the schema describes",
+    needsVarlinkctl,
+    async () => {
+      await using s = await serve(inCall);
+      const reply = await varlinkctl(
+        "call",
+        s.path,
+        "io.siku2.VoiceCall.Watch",
+        "{}",
+      );
+      assert.deepEqual(JSON.parse(reply), { state: inCall });
+    },
+  );
 
   it("streams changes", async () => {
     await using s = await serve(inCall);
@@ -87,7 +91,7 @@ describe("io.siku2.VoiceCall", () => {
     client.close();
   });
 
-  it("passes commands on", async () => {
+  it("passes commands on", needsVarlinkctl, async () => {
     await using s = await serve(inCall);
     const call = (method: string, parameters: object) =>
       varlinkctl(
