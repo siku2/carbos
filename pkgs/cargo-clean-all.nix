@@ -1,4 +1,8 @@
-{ rustPlatform, fetchFromGitHub }:
+{
+  fetchFromGitHub,
+  nix-update-script,
+  rustPlatform,
+}:
 
 rustPlatform.buildRustPackage rec {
   pname = "cargo-clean-all";
@@ -11,4 +15,6 @@ rustPlatform.buildRustPackage rec {
     hash = "sha256-CJzjw/g0Ap7TKC2m+bVlH+/iCUOQITmE6HGvrNzWQ3o=";
   };
   cargoHash = "sha256-9Qv2/XacE82AtZCZS5vtSeVdnD6Ugs+Qn/EVevMndQM=";
+
+  passthru.updateScript = nix-update-script { extraArgs = [ "--flake" ]; };
 }

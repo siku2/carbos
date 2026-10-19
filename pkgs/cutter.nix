@@ -2,6 +2,7 @@
   lib,
   stdenvNoCC,
   fetchurl,
+  nix-update-script,
   undmg,
 }:
 
@@ -29,6 +30,8 @@ stdenvNoCC.mkDerivation rec {
 
   # Any change to the bundle breaks the code signature.
   dontFixup = true;
+
+  passthru.updateScript = nix-update-script { extraArgs = [ "--flake" ]; };
 
   meta = {
     description = "Reverse engineering platform powered by Rizin";

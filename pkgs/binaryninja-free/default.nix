@@ -1,8 +1,12 @@
 {
   lib,
   stdenvNoCC,
+  curl,
   fetchurl,
+  gnused,
+  jq,
   undmg,
+  writeShellApplication,
 }:
 
 stdenvNoCC.mkDerivation rec {
@@ -29,6 +33,16 @@ stdenvNoCC.mkDerivation rec {
 
   # Any change to the bundle breaks the code signature.
   dontFixup = true;
+
+  passthru.updateScript = writeShellApplication {
+    name = "binaryninja-free-update";
+    runtimeInputs = [
+      curl
+      gnused
+      jq
+    ];
+    text = builtins.readFile ./update.sh;
+  };
 
   meta = {
     description = "Interactive decompiler, disassembler and debugger";

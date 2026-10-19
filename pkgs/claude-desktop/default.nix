@@ -1,12 +1,15 @@
 {
   lib,
   stdenvNoCC,
+  curl,
   fetchurl,
+  gnused,
+  jq,
   unzip,
+  writeShellApplication,
 }:
 
 let
-  # See https://downloads.claude.ai/releases/darwin/universal/RELEASES.json
   version = "2.9939.4";
   commit = "a166d8a7c640e65ad825ebfb99d74ccbb9c8940d";
 in
@@ -35,6 +38,16 @@ stdenvNoCC.mkDerivation {
 
     runHook postInstall
   '';
+
+  passthru.updateScript = writeShellApplication {
+    name = "claude-desktop-update";
+    runtimeInputs = [
+      curl
+      gnused
+      jq
+    ];
+    text = builtins.readFile ./update.sh;
+  };
 
   meta = {
     description = "Desktop application for Claude";

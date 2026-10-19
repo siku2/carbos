@@ -1,7 +1,10 @@
 {
   callPackage,
   coreutils,
+  curl,
   gawk,
+  gnused,
+  jq,
   makeDesktopItem,
   steam-run,
   symlinkJoin,
@@ -51,6 +54,17 @@ symlinkJoin {
   postBuild = ''
     ln -s ${gui}/share/pixmaps $out/share/pixmaps
   '';
-  passthru = { inherit server gui; };
+  passthru = {
+    inherit server gui;
+    updateScript = writeShellApplication {
+      name = "rlbot-update";
+      runtimeInputs = [
+        curl
+        gnused
+        jq
+      ];
+      text = builtins.readFile ./update.sh;
+    };
+  };
   meta.mainProgram = "rlbot";
 }

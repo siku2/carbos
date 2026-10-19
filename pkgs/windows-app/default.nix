@@ -1,9 +1,14 @@
 {
   lib,
   stdenvNoCC,
-  fetchurl,
-  xar,
   cpio,
+  curl,
+  fetchurl,
+  gnused,
+  jq,
+  libxml2,
+  writeShellApplication,
+  xar,
 }:
 
 stdenvNoCC.mkDerivation rec {
@@ -38,6 +43,17 @@ stdenvNoCC.mkDerivation rec {
   '';
 
   dontFixup = true;
+
+  passthru.updateScript = writeShellApplication {
+    name = "windows-app-update";
+    runtimeInputs = [
+      curl
+      gnused
+      jq
+      libxml2
+    ];
+    text = builtins.readFile ./update.sh;
+  };
 
   meta = {
     description = "Microsoft client for remote Windows desktops and apps";
