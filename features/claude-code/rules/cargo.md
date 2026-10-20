@@ -43,7 +43,10 @@ is enabled.
 
 ## C7: inline-workspace-tables
 
-Write `x = { workspace = true }`, not `x.workspace = true`.
+Dependencies use `x = { workspace = true }`, not `x.workspace = true`.
+
+Fields in `[package]` can only take `workspace`, so they use the short form
+`edition.workspace = true`.
 
 ## C8: sorted-member-dependencies
 
