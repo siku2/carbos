@@ -13,6 +13,7 @@
         dockerfile
         git-firefly
         html
+        json5
         nix
         sql
         toml
