@@ -4,7 +4,13 @@
     ./tailscale.nix
     inputs.self.modules.darwin.claude-code
     inputs.self.modules.darwin.packages
+    inputs.self.modules.darwin.pmset
   ];
+
+  pmset = {
+    enable = true;
+    ac.sleep = 0;
+  };
 
   nixpkgs = {
     hostPlatform = "aarch64-darwin";
