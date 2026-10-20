@@ -35,6 +35,8 @@
 
       max-jobs = 6;
       cores = 4;
+
+      warn-large-path-threshold = "1G";
     };
 
     gc = {
