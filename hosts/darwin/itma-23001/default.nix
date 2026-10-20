@@ -32,6 +32,9 @@
 
       min-free = 10737418240; # 10 GiB
       max-free = 53687091200; # 50 GiB
+
+      max-jobs = 6;
+      cores = 4;
     };
 
     gc = {
