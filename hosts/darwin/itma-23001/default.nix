@@ -3,6 +3,7 @@
   imports = [
     ./tailscale.nix
     inputs.self.modules.darwin.claude-code
+    inputs.self.modules.darwin.codex
     inputs.self.modules.darwin.packages
     inputs.self.modules.darwin.pmset
   ];

@@ -2,6 +2,7 @@
 {
   imports = [
     inputs.self.modules.nixos.claude-code
+    inputs.self.modules.nixos.codex
     inputs.self.modules.nixos.packages
     ./default-apps.nix
     ./desktop.nix
