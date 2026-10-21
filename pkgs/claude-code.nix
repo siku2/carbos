@@ -8,8 +8,9 @@ let
   libraryPath = builtins.match ".*--prefix LD_LIBRARY_PATH : ([^ ]+) .*" installPhase;
 in
 # nixpkgs finds the voice module's libasound through LD_LIBRARY_PATH, which
-# every command started from Claude Code inherits. An RPATH, unlike a RUNPATH,
-# also applies to the module, so record the path there instead.
+# every command started from Claude Code inherits. Drop it at the cost of voice
+# input. Adding an RPATH instead makes patchelf overlap the LOAD segments of
+# the Bun binary, which then crashes in ld.so.
 if !stdenv.hostPlatform.isLinux then
   claude-code
 else
@@ -20,6 +21,4 @@ else
     installPhase =
       builtins.replaceStrings [ "--prefix LD_LIBRARY_PATH : ${lib.head libraryPath} " ] [ "" ]
         installPhase;
-    runtimeDependencies = [ (lib.removeSuffix "/lib" (lib.head libraryPath)) ];
-    patchelfFlags = [ "--force-rpath" ];
   }
