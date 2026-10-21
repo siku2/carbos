@@ -18,7 +18,6 @@ in
   programs.opencode = {
     enable = true;
     package = opencodeWithSecrets;
-    extraPackages = [ pkgs.nodejs ];
     settings = {
       formatter = true;
       lsp = true;
@@ -41,11 +40,7 @@ in
         };
         zai-mcp-server = {
           type = "local";
-          command = [
-            "npx"
-            "-y"
-            "@z_ai/mcp-server"
-          ];
+          command = [ (lib.getExe pkgs.zai-mcp-server) ];
           environment = {
             Z_AI_API_KEY = "{env:ZAI_API_KEY}";
             Z_AI_MODE = "ZAI";
