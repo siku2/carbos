@@ -22,7 +22,7 @@ in
     settings = {
       formatter = true;
       lsp = true;
-      mcp = {
+      mcp.servers = {
         web-reader = {
           type = "remote";
           url = "https://api.z.ai/api/mcp/web_reader/mcp";

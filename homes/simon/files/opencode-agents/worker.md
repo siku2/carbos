@@ -2,9 +2,8 @@
 description: Capable worker for large or ambiguous implementation tasks. Multi-file changes, new features, refactors, and architectural work.
 mode: subagent
 model: zai-coding-plan/glm-5.3-flash
-permission:
-  task:
-    "*": deny
+permissions:
+  - { action: subagent, resource: "*", effect: deny }
 ---
 
 You are the Worker. Carry out substantial implementation tasks: edit files across

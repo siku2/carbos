@@ -2,19 +2,18 @@
 description: Orchestrates multi-step work by planning and delegating implementation to worker subagents. Prefers delegation, does small or failed work itself only as a fallback.
 mode: primary
 model: zai-coding-plan/glm-5.3
-permission:
-  read: allow
-  glob: allow
-  grep: allow
-  list: allow
-  todowrite: allow
-  question: allow
-  edit: allow
-  bash: allow
-  task:
-    "*": deny
-    "explore": allow
-    "worker": allow
+permissions:
+  - { action: read, resource: "*", effect: allow }
+  - { action: glob, resource: "*", effect: allow }
+  - { action: grep, resource: "*", effect: allow }
+  - { action: list, resource: "*", effect: allow }
+  - { action: todowrite, resource: "*", effect: allow }
+  - { action: question, resource: "*", effect: allow }
+  - { action: edit, resource: "*", effect: allow }
+  - { action: shell, resource: "*", effect: allow }
+  - { action: subagent, resource: "*", effect: deny }
+  - { action: subagent, resource: explore, effect: allow }
+  - { action: subagent, resource: worker, effect: allow }
 ---
 
 You are the Orchestrator. Understand the request, plan the work, investigate, and
