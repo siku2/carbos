@@ -10,7 +10,7 @@ let
     exec ${lib.getExe pkgs.secretspec} --file ${secretspecManifest} run \
       --scope opencode \
       --caller opencode \
-      --reason "opencode needs the Z.ai key for its MCP servers" \
+      --reason "opencode needs the Z.ai key for its provider and MCP servers" \
       -- ${lib.getExe pkgs.opencode} "$@"
   '';
 in
@@ -22,6 +22,7 @@ in
     settings = {
       formatter = true;
       lsp = true;
+      providers.zai-coding-plan.env = [ "ZAI_API_KEY" ];
       mcp.servers = {
         web-reader = {
           type = "remote";
