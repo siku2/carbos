@@ -19,7 +19,6 @@
     ./kicad
     ./mic/module.nix
     ./nextcloud.nix
-    ./niri.nix
     ./rbw.nix
     ./vesktop
     ./wallpaper.nix

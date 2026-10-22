@@ -11,10 +11,10 @@ let
   };
 in
 {
-  xdg.configFile."niri/config.kdl".source = ./files/niri.kdl;
+  xdg.configFile."niri/config.kdl".source = ./niri.kdl;
 
   home.activation.dmsNiriFragments = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    FRAGMENT_DIR=${lib.escapeShellArg "${./files/niri-dms}"} \
+    FRAGMENT_DIR=${lib.escapeShellArg "${./niri-dms}"} \
     run ${lib.getExe seedFragments}
   '';
 }

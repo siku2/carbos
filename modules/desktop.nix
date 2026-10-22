@@ -4,8 +4,6 @@
   ...
 }:
 {
-  programs.niri.enable = true;
-
   programs.dms-shell.enable = true;
   # dms exits with 128 + SIGTERM when it is stopped.
   systemd.user.services.dms.serviceConfig.SuccessExitStatus = 143;
@@ -22,7 +20,6 @@
   };
 
   environment.systemPackages = [
-    pkgs.xwayland-satellite
     # DMS uses this for its printer management UI.
     pkgs.cups-pk-helper
     # Qt's default theme name. Without it, icon lookup fails outright.
