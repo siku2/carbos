@@ -1,19 +1,23 @@
 { inputs, lib, ... }:
 let
-  # A file that takes its own name as an argument gets the package it replaces.
+  entries = builtins.readDir ../../pkgs;
+  stray = lib.attrNames (lib.filterAttrs (_: type: type != "directory") entries);
+  names =
+    lib.throwIf (stray != [ ])
+      "pkgs/ only holds directories, move ${lib.concatStringsSep ", " stray} into one"
+      (lib.attrNames entries);
+
+  # A package that takes its own name as an argument gets the one it replaces.
   localPackages =
     final: prev:
-    lib.mapAttrs' (
-      file: _:
+    lib.genAttrs names (
+      name:
       let
-        name = lib.removeSuffix ".nix" file;
-        path = ../../pkgs + "/${file}";
+        path = ../../pkgs/${name};
         namesake = lib.optionalAttrs (prev ? ${name}) { ${name} = prev.${name}; };
       in
-      lib.nameValuePair name (
-        final.callPackage path (lib.intersectAttrs (lib.functionArgs (import path)) namesake)
-      )
-    ) (builtins.readDir ../../pkgs);
+      final.callPackage path (lib.intersectAttrs (lib.functionArgs (import path)) namesake)
+    );
 
   # A local package only replaces its nixpkgs namesake on the platforms it
   # declares, so the darwin app bundles never shadow nixpkgs on Linux.
@@ -36,25 +40,22 @@ let
   # nixpkgs style, like nix-update-script.
   updates =
     packages:
-    lib.concatLists (
-      lib.mapAttrsToList (
-        entry: type:
-        let
-          name = lib.removeSuffix ".nix" entry;
-          file = if type == "directory" then "pkgs/${entry}/default.nix" else "pkgs/${entry}";
-          script = packages.${name}.updateScript;
-          command =
-            if lib.isList script then
-              lib.escapeShellArgs (map toString script)
-            else
-              "${lib.getExe script} ${file}";
-          # Overrides inherit the update scripts of nixpkgs, which only work there.
-          position = builtins.unsafeGetAttrPos "updateScript" (packages.${name}.passthru or { });
-          own = position != null && lib.hasPrefix (toString ../../pkgs) position.file;
-        in
-        lib.optional own "UPDATE_NIX_ATTR_PATH=${name} ${command}"
-      ) (builtins.readDir ../../pkgs)
-    );
+    lib.concatMap (
+      name:
+      let
+        file = "pkgs/${name}/default.nix";
+        script = packages.${name}.updateScript;
+        command =
+          if lib.isList script then
+            lib.escapeShellArgs (map toString script)
+          else
+            "${lib.getExe script} ${file}";
+        # Overrides inherit the update scripts of nixpkgs, which only work there.
+        position = builtins.unsafeGetAttrPos "updateScript" (packages.${name}.passthru or { });
+        own = position != null && lib.hasPrefix (toString ../../pkgs) position.file;
+      in
+      lib.optional own "UPDATE_NIX_ATTR_PATH=${name} ${command}"
+    ) names;
 in
 {
   imports = [ ./unstable.nix ];
@@ -77,7 +78,7 @@ in
       # Some nixpkgs packages claim darwin support but depend on Linux-only ones.
       packages = lib.filterAttrs (
         _: package: lib.isDerivation package && (builtins.tryEval package.drvPath).success
-      ) (lib.getAttrs (map (lib.removeSuffix ".nix") (lib.attrNames (builtins.readDir ../../pkgs))) all);
+      ) (lib.getAttrs names all);
 
       apps.update = {
         type = "app";

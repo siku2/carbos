@@ -16,7 +16,7 @@ if !stdenv.hostPlatform.isLinux then
 else
   assert lib.assertMsg (
     libraryPath != null
-  ) "claude-code no longer sets LD_LIBRARY_PATH, drop pkgs/claude-code.nix.";
+  ) "claude-code no longer sets LD_LIBRARY_PATH, drop pkgs/claude-code.";
   claude-code.overrideAttrs {
     installPhase =
       builtins.replaceStrings [ "--prefix LD_LIBRARY_PATH : ${lib.head libraryPath} " ] [ "" ]

@@ -37,7 +37,7 @@ let
               candidates = lib.attrNames (lib.filterAttrs (_: claims: claims != [ ]) entries);
             in
             if entries == { } then
-              throw "carbos.defaultApps.${name}: declare its desktop entries in pkgs/${name}.nix."
+              throw "carbos.defaultApps.${name}: declare its desktop entries in pkgs/${name}/default.nix."
             else if lib.length candidates == 1 then
               lib.head candidates
             else
