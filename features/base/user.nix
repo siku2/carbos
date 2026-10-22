@@ -35,6 +35,4 @@
       }
     });
   '';
-
-  home-manager.users.${config.carbos.user.login} = import ../homes/simon;
 }

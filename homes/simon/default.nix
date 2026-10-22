@@ -26,20 +26,13 @@
   ];
 
   home = {
-    stateVersion = "26.05";
-    username = osConfig.carbos.user.login;
-    homeDirectory = "/home/${osConfig.carbos.user.login}";
-
     # AccountsService falls back to this when no icon is set.
     file.".face".source = ./files/avatar.png;
 
     packages = with pkgs; [
-      ansifilter
       bitwarden-cli
       bitwarden-desktop
-      devcontainer
       file-roller
-      forgejo-cli
       git-credential-manager
       inkscape
       libsecret
@@ -60,42 +53,7 @@
 
   xdg.userDirs.enable = true;
 
-  # Generating it pulls in an options.json derivation that nix warns about.
-  manual.manpages.enable = false;
-
   programs = {
-    home-manager.enable = true;
-
-    fish = {
-      enable = true;
-      interactiveShellInit = ''
-        set -g fish_greeting
-      '';
-    };
-
-    ssh = {
-      enable = true;
-      enableDefaultConfig = false;
-      settings = {
-        "*" = {
-          AddKeysToAgent = "yes";
-          ControlMaster = "no";
-          ControlPath = "~/.ssh/master-%r@%n:%p";
-          ControlPersist = "no";
-          HashKnownHosts = false;
-          UserKnownHostsFile = "~/.ssh/known_hosts";
-        };
-        mindaro = {
-          hostname = "mindaro.local.bg12.ch";
-          user = "simon";
-        };
-        station-h7 = {
-          hostname = "station-h7.local.bg12.ch";
-          user = "simon";
-        };
-      };
-    };
-
     foot = {
       enable = true;
       settings = {
