@@ -7,9 +7,12 @@
   imports = [
     ./disk.nix
     ./hardware.nix
-    ../../../modules
-    inputs.self.modules.nixos.thinkpad
-  ];
+  ]
+  ++ (with inputs.self.modules.nixos; [
+    base
+    desktop
+    thinkpad
+  ]);
 
   networking.hostName = "carbon-x1";
 

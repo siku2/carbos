@@ -10,10 +10,11 @@
     ./disk.nix
     ./gaming.nix
     ./hardware.nix
-    ../../../modules
   ]
   ++ (with inputs.self.modules.nixos; [
     ardour
+    base
+    desktop
     mic
     rlbot
     vesktop
