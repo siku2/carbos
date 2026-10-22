@@ -1,3 +1,4 @@
+{ lib, ... }:
 {
   imports = [
     ./mic.nix
@@ -16,7 +17,7 @@
   # Calls from the VoiceCallBridge plugin of the Vesktop above.
   carbos.dms = {
     plugins.voiceCall.enable = true;
-    bars.default.center = [ "voiceCall" ];
+    bars.default.center = lib.mkAfter [ "voiceCall" ];
   };
 
   # Antialiasing renders at twice the canvas size. A full-width canvas at 2x

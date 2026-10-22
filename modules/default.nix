@@ -8,6 +8,7 @@
     ./rlbot.nix
     ./thinkpad.nix
     inputs.self.modules.nixos.base
+    inputs.self.modules.nixos.dms
     inputs.self.modules.nixos.niri
   ];
 

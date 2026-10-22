@@ -9,7 +9,6 @@
     ./ardour
     ./atuin.nix
     ./bitwarden.nix
-    ./dms
     ./dsearch.nix
     ./firefox.nix
     ./fractal.nix

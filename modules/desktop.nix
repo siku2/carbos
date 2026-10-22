@@ -1,27 +1,9 @@
 {
-  config,
   pkgs,
   ...
 }:
 {
-  programs.dms-shell.enable = true;
-  # dms exits with 128 + SIGTERM when it is stopped.
-  systemd.user.services.dms.serviceConfig.SuccessExitStatus = 143;
-
-  services.displayManager.dms-greeter = {
-    enable = true;
-    compositor.name = "niri";
-    configHome = "/home/${config.carbos.user.login}";
-  };
-
-  services.displayManager.autoLogin = {
-    enable = true;
-    user = config.carbos.user.login;
-  };
-
   environment.systemPackages = [
-    # DMS uses this for its printer management UI.
-    pkgs.cups-pk-helper
     # Qt's default theme name. Without it, icon lookup fails outright.
     pkgs.adwaita-icon-theme
   ];
