@@ -22,6 +22,7 @@
     ./nextcloud.nix
     ./niri.nix
     ./rbw.nix
+    ./vesktop
     ./wallpaper.nix
   ]
   ++ (with inputs.self.modules.homeManager; [

@@ -1,4 +1,3 @@
-{ pkgs, ... }:
 {
   imports = [
     ./mic.nix
@@ -7,8 +6,12 @@
   ];
 
   # Vesktop instead of the official client: it can share audio on Wayland.
-  # Vencord comes from our overlay with the local plugins.
-  home.packages = [ (pkgs.vesktop.override { withSystemVencord = true; }) ];
+  carbos.vesktop = {
+    enable = true;
+    plugins.VoiceCallBridge.enable = true;
+    # The mic chain already cleans up the voice.
+    inputProfile = "STUDIO";
+  };
 
   # Calls from the VoiceCallBridge plugin of the Vesktop above.
   carbos.dms = {
