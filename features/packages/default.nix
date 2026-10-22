@@ -57,6 +57,8 @@ let
     );
 in
 {
+  imports = [ ./unstable.nix ];
+
   flake.overlays.default = composed;
 
   perSystem =

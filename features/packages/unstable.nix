@@ -1,6 +1,6 @@
 { inputs, ... }:
 {
-  # Composed into the default overlay in packages.nix.
+  # Composed into the default overlay in default.nix.
   flake.overlays.unstable =
     final: _prev:
     let
