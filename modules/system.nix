@@ -1,4 +1,4 @@
-{ config, ... }:
+{ config, pkgs, ... }:
 {
   system.nixos = {
     distroId = "carbos";
@@ -57,6 +57,11 @@
   security.rtkit.enable = true;
 
   services.upower.enable = true;
+
+  environment.systemPackages = [
+    pkgs.pciutils
+    pkgs.usbutils
+  ];
 
   services.fwupd.enable = true;
 
