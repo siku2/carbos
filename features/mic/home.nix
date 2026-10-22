@@ -152,8 +152,6 @@ let
 in
 {
   options.carbos.mic = {
-    enable = lib.mkEnableOption "a processed microphone source";
-
     name = option types.str "Name of the processed source.";
 
     device = option types.str "Node name of the raw microphone.";
@@ -170,7 +168,7 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
+  config = {
     # A separate client, so a change restarts the chain and not all of PipeWire.
     systemd.user.services.mic = {
       Unit = {

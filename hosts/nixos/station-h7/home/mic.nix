@@ -1,6 +1,5 @@
 {
   carbos.mic = {
-    enable = true;
     name = "RØDE Procaster";
     device = "alsa_input.usb-Solid_State_Logic_SSL_2_Mk_II-00.HiFi__Mic1__source";
 

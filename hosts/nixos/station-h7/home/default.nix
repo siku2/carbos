@@ -8,7 +8,6 @@
 
   # Vesktop instead of the official client: it can share audio on Wayland.
   carbos.vesktop = {
-    enable = true;
     plugins.VoiceCallBridge.enable = true;
     # The mic chain already cleans up the voice.
     inputProfile = "STUDIO";
@@ -24,10 +23,7 @@
   # HiDPI then exceeds the GPU's 16384 px limit and KiCad drops to software.
   carbos.kicad.graphics.antialiasing = "none";
 
-  carbos.ardour = {
-    enable = true;
-    appearance.fontScale = 150;
-  };
+  carbos.ardour.appearance.fontScale = 150;
 
   carbos.wallpaper = {
     width = 7680;

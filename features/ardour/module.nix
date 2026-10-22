@@ -91,8 +91,6 @@ let
 in
 {
   options.carbos.ardour = {
-    enable = lib.mkEnableOption "Ardour";
-
     package = lib.mkPackageOption pkgs "ardour" { };
 
     plugins = mkOption {
@@ -121,7 +119,7 @@ in
     '';
   };
 
-  config = lib.mkIf cfg.enable {
+  config = {
     home.packages = [ package ];
 
     # Skips the first-run wizard. Its choices are the options above.

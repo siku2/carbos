@@ -1,11 +1,6 @@
 { pkgs, ... }:
 {
-  imports = [
-    ./ardour
-    ./git.nix
-    ./mic/module.nix
-    ./vesktop
-  ];
+  imports = [ ./git.nix ];
 
   home.packages = [ pkgs.git-credential-manager ];
 }

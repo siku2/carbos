@@ -11,7 +11,13 @@
     ./gaming.nix
     ./hardware.nix
     ../../../modules
-  ];
+  ]
+  ++ (with inputs.self.modules.nixos; [
+    ardour
+    mic
+    rlbot
+    vesktop
+  ]);
 
   networking.hostName = "station-h7";
 

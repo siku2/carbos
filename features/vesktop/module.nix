@@ -62,8 +62,6 @@ let
 in
 {
   options.carbos.vesktop = {
-    enable = lib.mkEnableOption "Vesktop";
-
     package = lib.mkPackageOption pkgs "vesktop" { };
 
     discordBranch = setting (types.enum [
@@ -108,7 +106,7 @@ in
     ]) "The microphone input profile Discord switches to at startup.";
   };
 
-  config = lib.mkIf cfg.enable {
+  config = {
     # Vencord comes from our overlay with the local plugins.
     home.packages = [ (cfg.package.override { withSystemVencord = true; }) ];
 

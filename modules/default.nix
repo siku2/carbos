@@ -1,7 +1,6 @@
 { config, inputs, ... }:
 {
   imports = [
-    ./rlbot.nix
     inputs.self.modules.nixos.base
     inputs.self.modules.nixos.desktop
   ];
