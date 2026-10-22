@@ -28,11 +28,7 @@ in
     ./zsh.nix
   ];
 
-  carbos.user = {
-    fullName = "Simon Berger";
-    email = "simon.berger@inomotech.com";
-    projectsDirectory = "/Volumes/Projects";
-  };
+  carbos.user.projectsDirectory = "/Volumes/Projects";
 
   home = {
     username = "simon";

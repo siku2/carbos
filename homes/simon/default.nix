@@ -25,10 +25,6 @@
     ./wallpaper.nix
   ];
 
-  carbos.user = {
-    inherit (osConfig.carbos.user) fullName email;
-  };
-
   home = {
     stateVersion = "26.05";
     username = osConfig.carbos.user.login;

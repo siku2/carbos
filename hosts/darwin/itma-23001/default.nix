@@ -133,12 +133,7 @@
 
   documentation.enable = false;
 
-  home-manager = {
-    useGlobalPkgs = true;
-    useUserPackages = true;
-    extraSpecialArgs = {
-      inherit inputs;
-    };
-    users.simon = ./home;
-  };
+  carbos.user.email = "simon.berger@inomotech.com";
+
+  home-manager.users.simon = ./home;
 }

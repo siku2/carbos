@@ -5,23 +5,6 @@
 }:
 {
   options.carbos = {
-    user = {
-      login = lib.mkOption {
-        type = lib.types.str;
-        default = "simon";
-      };
-
-      fullName = lib.mkOption {
-        type = lib.types.str;
-        default = "Simon Berger";
-      };
-
-      email = lib.mkOption {
-        type = lib.types.str;
-        default = "simon@siku2.io";
-      };
-    };
-
     fonts = {
       mono = {
         package = lib.mkPackageOption pkgs [

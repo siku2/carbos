@@ -30,8 +30,6 @@
       ];
     in
     {
-      imports = [ ../_options.nix ];
-
       programs.git = {
         enable = true;
         lfs.enable = true;
