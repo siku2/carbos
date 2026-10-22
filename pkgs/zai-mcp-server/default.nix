@@ -24,7 +24,7 @@ buildNpmPackage (finalAttrs: {
   # The registry tarball ships prebuilt JavaScript but no lockfile.
   postPatch = ''
     cp ${./package-lock.json} package-lock.json
-    npm pkg delete scripts.prepare
+    ${lib.getExe' nodejs "npm"} pkg delete scripts.prepare
   '';
 
   npmDepsHash = "sha256-rtuyCucm1efHhsgPYHdl55mHWJfwqmaUcHqNQjMHzXo=";
