@@ -155,6 +155,10 @@ in
           Value = false;
           Status = "locked";
         };
+        "dom.webgpu.enabled" = {
+          Value = true;
+          Status = "locked";
+        };
       };
 
       FirefoxHome = {
