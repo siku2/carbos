@@ -50,8 +50,8 @@ in
     };
 
     agents = {
-      orchestrator = ./files/opencode-agents/orchestrator.md;
-      worker = ./files/opencode-agents/worker.md;
+      orchestrator = ./agents/orchestrator.md;
+      worker = ./agents/worker.md;
     };
   };
 }

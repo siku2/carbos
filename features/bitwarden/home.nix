@@ -41,6 +41,11 @@ let
   };
 in
 {
+  home.packages = [
+    pkgs.bitwarden-cli
+    pkgs.bitwarden-desktop
+  ];
+
   home.activation.bitwardenSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     DATA_FILE=${lib.escapeShellArg dataFile} \
     MANAGED=${lib.escapeShellArg (builtins.toJSON managed)} \

@@ -98,7 +98,10 @@ in
     "${lib.getExe pkgs.bash} -c 'yes 2>/dev/null | ${lib.getExe config.services.vdirsyncer.package} discover'"
   ];
 
-  home.packages = [ pkgs.rclone ];
+  home.packages = [
+    pkgs.rclone
+    pkgs.nextcloud-talk-desktop
+  ];
 
   # A mount, not a sync. Nothing is available offline.
   systemd.user.services.nextcloud-mount = {

@@ -8,8 +8,19 @@
       ./nixos.nix
     ]
     ++ (with inputs.self.modules.nixos; [
+      atuin
+      bitwarden
       dms
+      dsearch
+      firefox
+      fractal
+      kicad
+      nextcloud
       niri
+      opencode
+      rbw
+      secretspec
+      wallpaper
     ]);
   };
 
