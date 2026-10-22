@@ -1,5 +1,6 @@
 {
   config,
+  inputs,
   ...
 }:
 {
@@ -7,6 +8,7 @@
     ./disk.nix
     ./hardware.nix
     ../../../modules
+    inputs.self.modules.nixos.thinkpad
   ];
 
   networking.hostName = "carbon-x1";
