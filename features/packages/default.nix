@@ -7,13 +7,13 @@ let
       file: _:
       let
         name = lib.removeSuffix ".nix" file;
-        path = ../pkgs + "/${file}";
+        path = ../../pkgs + "/${file}";
         namesake = lib.optionalAttrs (prev ? ${name}) { ${name} = prev.${name}; };
       in
       lib.nameValuePair name (
         final.callPackage path (lib.intersectAttrs (lib.functionArgs (import path)) namesake)
       )
-    ) (builtins.readDir ../pkgs);
+    ) (builtins.readDir ../../pkgs);
 
   # A local package only replaces its nixpkgs namesake on the platforms it
   # declares, so the darwin app bundles never shadow nixpkgs on Linux.
@@ -50,10 +50,10 @@ let
               "${lib.getExe script} ${file}";
           # Overrides inherit the update scripts of nixpkgs, which only work there.
           position = builtins.unsafeGetAttrPos "updateScript" (packages.${name}.passthru or { });
-          own = position != null && lib.hasPrefix (toString ../pkgs) position.file;
+          own = position != null && lib.hasPrefix (toString ../../pkgs) position.file;
         in
         lib.optional own "UPDATE_NIX_ATTR_PATH=${name} ${command}"
-      ) (builtins.readDir ../pkgs)
+      ) (builtins.readDir ../../pkgs)
     );
 in
 {
@@ -75,7 +75,7 @@ in
       # Some nixpkgs packages claim darwin support but depend on Linux-only ones.
       packages = lib.filterAttrs (
         _: package: lib.isDerivation package && (builtins.tryEval package.drvPath).success
-      ) (lib.getAttrs (map (lib.removeSuffix ".nix") (lib.attrNames (builtins.readDir ../pkgs))) all);
+      ) (lib.getAttrs (map (lib.removeSuffix ".nix") (lib.attrNames (builtins.readDir ../../pkgs))) all);
 
       apps.update = {
         type = "app";
