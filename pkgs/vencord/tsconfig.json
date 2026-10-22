@@ -7,6 +7,10 @@
     "types": ["node"],
     "jsx": "preserve",
 
+    // Vencord's API has const enums like OptionType. esbuild inlines them.
+    "isolatedModules": false,
+    "verbatimModuleSyntax": false,
+
     "paths": {
       "@api/*": ["./.vencord-types/api/*"],
       "@components/*": ["./.vencord-types/components/*"],
