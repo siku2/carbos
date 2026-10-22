@@ -2,11 +2,21 @@
 {
   imports = [
     ./tailscale.nix
-    inputs.self.modules.darwin.claude-code
-    inputs.self.modules.darwin.codex
-    inputs.self.modules.darwin.packages
-    inputs.self.modules.darwin.pmset
-  ];
+  ]
+  ++ (with inputs.self.modules.darwin; [
+    claude-code
+    cli
+    codex
+    direnv
+    gh
+    git
+    packages
+    pmset
+    rdp
+    rust
+    starship
+    zed
+  ]);
 
   pmset = {
     enable = true;

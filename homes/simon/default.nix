@@ -1,5 +1,4 @@
 {
-  inputs,
   osConfig,
   pkgs,
   ...
@@ -24,18 +23,7 @@
     ./rbw.nix
     ./vesktop
     ./wallpaper.nix
-  ]
-  ++ (with inputs.self.modules.homeManager; [
-    claude-code
-    cli
-    codex
-    direnv
-    gh
-    git
-    rust
-    starship
-    zed
-  ]);
+  ];
 
   carbos.user = {
     inherit (osConfig.carbos.user) fullName email;

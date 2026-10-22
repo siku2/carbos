@@ -1,6 +1,5 @@
 {
   config,
-  inputs,
   pkgs,
   ...
 }:
@@ -27,19 +26,7 @@ in
     ./git.nix
     ./ssh.nix
     ./zsh.nix
-  ]
-  ++ (with inputs.self.modules.homeManager; [
-    claude-code
-    cli
-    codex
-    direnv
-    gh
-    git
-    rdp
-    rust
-    starship
-    zed
-  ]);
+  ];
 
   carbos.user = {
     fullName = "Simon Berger";

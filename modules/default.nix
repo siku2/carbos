@@ -1,9 +1,6 @@
 { inputs, ... }:
 {
   imports = [
-    inputs.self.modules.nixos.claude-code
-    inputs.self.modules.nixos.codex
-    inputs.self.modules.nixos.packages
     ./default-apps.nix
     ./desktop.nix
     ./fonts.nix
@@ -14,5 +11,17 @@
     ./unfree.nix
     ./user.nix
     ./vm.nix
-  ];
+  ]
+  ++ (with inputs.self.modules.nixos; [
+    claude-code
+    cli
+    codex
+    direnv
+    gh
+    git
+    packages
+    rust
+    starship
+    zed
+  ]);
 }
