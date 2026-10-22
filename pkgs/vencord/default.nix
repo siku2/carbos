@@ -5,6 +5,10 @@ let
 
   workspace = callPackage ./workspace.nix { inherit types; };
   types = callPackage ./types.nix { vencord = upstream; };
+  catalog = callPackage ./catalog.nix {
+    vencord = upstream;
+    inherit workspace;
+  };
 in
 upstream.overrideAttrs (old: {
   # esbuild applies the tsconfig nearest to a file's real path. Ours maps the
@@ -22,6 +26,6 @@ upstream.overrideAttrs (old: {
   '';
 
   passthru = old.passthru // {
-    inherit types workspace;
+    inherit catalog types workspace;
   };
 })
