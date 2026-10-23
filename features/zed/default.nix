@@ -90,6 +90,7 @@
             tree_view = true;
           };
           lsp.cargo-tom.initialization_options.hide_docs_info_message = true;
+          lsp.nil.settings.nix.flake.autoArchive = true;
           lsp.eslint.binary = {
             path = lib.getExe' pkgs.vscode-langservers-extracted "vscode-eslint-language-server";
             arguments = [ "--stdio" ];
