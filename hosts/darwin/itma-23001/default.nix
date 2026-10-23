@@ -122,6 +122,7 @@
     podman-desktop
     teams
     windows-app
+    zed-delta
   ];
 
   programs = {
