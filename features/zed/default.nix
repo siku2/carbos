@@ -14,6 +14,7 @@
         git-firefly
         html
         json5
+        log
         nix
         sql
         toml
