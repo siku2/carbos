@@ -25,22 +25,6 @@
         "type": "github"
       }
     },
-    "claude-keep-awake": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1792445380,
-        "narHash": "sha256-Hh6wdtZVXWDfDjxudqVjVFFAbHCARdmlUMOUflBj87A=",
-        "owner": "gecitemre",
-        "repo": "claude-keep-awake",
-        "rev": "77fa5d8c15db3ea3499bf351acb3ea93a9e9ae26",
-        "type": "github"
-      },
-      "original": {
-        "owner": "gecitemre",
-        "repo": "claude-keep-awake",
-        "type": "github"
-      }
-    },
     "claude-plugins-official": {
       "flake": false,
       "locked": {
@@ -220,7 +204,6 @@
     "root": {
       "inputs": {
         "chaotic": "chaotic",
-        "claude-keep-awake": "claude-keep-awake",
         "claude-plugins-official": "claude-plugins-official",
         "disko": "disko",
         "flake-parts": "flake-parts",
