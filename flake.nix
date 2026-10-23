@@ -42,6 +42,11 @@
       flake = false;
     };
 
+    claude-keep-awake = {
+      url = "github:gecitemre/claude-keep-awake";
+      flake = false;
+    };
+
     zed-extensions = {
       url = "github:SwornSystems/nix-zed-extensions";
       inputs = {

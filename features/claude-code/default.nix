@@ -18,6 +18,10 @@ in
     { config, ... }:
     {
       imports = [ managedSettings ];
+      # keep-awake only switches sleep while Claude works if this needs no password.
+      security.sudo.extraConfig = ''
+        ${config.carbos.user.login} ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0
+      '';
       system.activationScripts.postActivation.text = ''
         mkdir -p "/Library/Application Support/ClaudeCode"
         cp ${config.carbos.claudeCode.managedSettings} "/Library/Application Support/ClaudeCode/managed-settings.json"
@@ -82,7 +86,8 @@ in
           (pluginFromMarketplace "typescript-lsp" {
             lspServers.typescript.command = "vtsls";
           })
-        ];
+        ]
+        ++ lib.optional pkgs.stdenv.hostPlatform.isDarwin inputs.claude-keep-awake;
         context = ./CLAUDE.md;
         rules = {
           cargo = ./rules/cargo.md;
