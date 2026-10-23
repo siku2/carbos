@@ -41,6 +41,21 @@
         "type": "github"
       }
     },
+    "crane": {
+      "locked": {
+        "lastModified": 1788465171,
+        "narHash": "sha256-Y1/TTVXjYXGF068IThQH9fPSZ0SIE74PABlUxnWTUH0=",
+        "owner": "ipetkov",
+        "repo": "crane",
+        "rev": "eb35abda9f232cc6610b1d1e3200d15c49b7ac54",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ipetkov",
+        "repo": "crane",
+        "type": "github"
+      }
+    },
     "disko": {
       "inputs": {
         "nixpkgs": [
@@ -59,6 +74,37 @@
         "owner": "nix-community",
         "repo": "disko",
         "type": "github"
+      }
+    },
+    "ephemeris": {
+      "inputs": {
+        "crane": "crane",
+        "flake-parts": [
+          "flake-parts"
+        ],
+        "nixpkgs": [
+          "nixpkgs-darwin"
+        ],
+        "rust-overlay": [
+          "rust-overlay"
+        ],
+        "treefmt-nix": [
+          "treefmt-nix"
+        ],
+        "vale-ai-tells": "vale-ai-tells"
+      },
+      "locked": {
+        "lastModified": 1792767208,
+        "narHash": "sha256-ErpncWOLJvrZKPEz5Loldy01F2S3rj7pf1plAfWjhjw=",
+        "ref": "refs/heads/main",
+        "rev": "22177c2b42ca8d55d1a13bd2bec4ffa637ce67a3",
+        "revCount": 1400,
+        "type": "git",
+        "url": "https://codeberg.org/inomotech/ephemeris"
+      },
+      "original": {
+        "type": "git",
+        "url": "https://codeberg.org/inomotech/ephemeris"
       }
     },
     "flake-parts": {
@@ -114,6 +160,34 @@
         "ref": "release-26.05",
         "repo": "home-manager",
         "type": "github"
+      }
+    },
+    "lux": {
+      "inputs": {
+        "crane": [
+          "lux",
+          "ephemeris",
+          "crane"
+        ],
+        "ephemeris": "ephemeris",
+        "nixpkgs": [
+          "lux",
+          "ephemeris",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1792796568,
+        "narHash": "sha256-MfTRcijOuCM+UwIfTwNzktcH2WRiNlrzLYjlw2NQD4c=",
+        "ref": "refs/heads/main",
+        "rev": "c7603e8609e457d2908e9d0beeebf52c6bbc4ca2",
+        "revCount": 9,
+        "type": "git",
+        "url": "https://codeberg.org/inomotech/lux"
+      },
+      "original": {
+        "type": "git",
+        "url": "https://codeberg.org/inomotech/lux"
       }
     },
     "nix-darwin": {
@@ -208,11 +282,13 @@
         "disko": "disko",
         "flake-parts": "flake-parts",
         "home-manager": "home-manager",
+        "lux": "lux",
         "nix-darwin": "nix-darwin",
         "nixpkgs": "nixpkgs",
         "nixpkgs-darwin": "nixpkgs-darwin",
         "nixpkgs-unstable": "nixpkgs-unstable",
         "nixpkgs-unstable-darwin": "nixpkgs-unstable-darwin",
+        "rust-overlay": "rust-overlay",
         "treefmt-nix": "treefmt-nix",
         "zed-extensions": "zed-extensions"
       }
@@ -224,11 +300,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1788077403,
-        "narHash": "sha256-c20YZQKzQ27qC6Wh729fWRTpI7oV4+7Ur4icKssD4Wc=",
+        "lastModified": 1792739799,
+        "narHash": "sha256-M2rr/yPbTHvgAzCyZ+zHJHflFM0XU7t42Sw2skA3TQM=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "89e26eeaafa88a2ede4778734acc794ff0299beb",
+        "rev": "b0829a2cc9f7b596583331d78a942c1e5170d8a0",
         "type": "github"
       },
       "original": {
@@ -257,12 +333,30 @@
         "type": "github"
       }
     },
+    "vale-ai-tells": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1789442525,
+        "narHash": "sha256-GwgAMjcxFqjuGqTc8OP5uvJb2jQiRhkIBxM+DQpauME=",
+        "owner": "tbhb",
+        "repo": "vale-ai-tells",
+        "rev": "dd60c5dc0d5432f71b0113fe2003fb06d069a71f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "tbhb",
+        "repo": "vale-ai-tells",
+        "type": "github"
+      }
+    },
     "zed-extensions": {
       "inputs": {
         "nixpkgs": [
           "nixpkgs"
         ],
-        "rust-overlay": "rust-overlay"
+        "rust-overlay": [
+          "rust-overlay"
+        ]
       },
       "locked": {
         "lastModified": 1792657291,

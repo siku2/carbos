@@ -42,17 +42,33 @@
       flake = false;
     };
 
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     zed-extensions = {
       url = "github:SwornSystems/nix-zed-extensions";
       inputs = {
         nixpkgs.follows = "nixpkgs";
-        rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
+        rust-overlay.follows = "rust-overlay";
       };
     };
 
     treefmt-nix = {
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    # Linux builds and commands in a VM on the Macs.
+    lux = {
+      url = "git+https://codeberg.org/inomotech/lux";
+      inputs.ephemeris.inputs = {
+        flake-parts.follows = "flake-parts";
+        nixpkgs.follows = "nixpkgs-darwin";
+        rust-overlay.follows = "rust-overlay";
+        treefmt-nix.follows = "treefmt-nix";
+      };
     };
   };
 

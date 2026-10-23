@@ -2,6 +2,7 @@
 {
   imports = [
     ./tailscale.nix
+    inputs.lux.darwinModules.default
   ]
   ++ (with inputs.self.modules.darwin; [
     claude-code
@@ -17,6 +18,8 @@
     starship
     zed
   ]);
+
+  services.lx.enable = true;
 
   pmset = {
     enable = true;
