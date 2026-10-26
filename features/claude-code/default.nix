@@ -54,9 +54,12 @@ in
         name = "claude-code-allow-bypass";
         paths = [ pkgs.claude-code ];
         nativeBuildInputs = [ pkgs.makeBinaryWrapper ];
+        # nixpkgs defaults to system-only trust, which fails on macOS here.
+        # Restore Claude's default before the inner wrapper sets its fallback.
         postBuild = ''
           wrapProgram $out/bin/claude \
             --inherit-argv0 \
+            --set-default CLAUDE_CODE_CERT_STORE bundled,system \
             --add-flags --allow-dangerously-skip-permissions \
             --suffix PATH : ${
               lib.makeBinPath [
