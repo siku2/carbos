@@ -19,7 +19,13 @@
     zed
   ]);
 
-  services.lx.enable = true;
+  services.lx = {
+    enable = true;
+    shares = [
+      "/Users"
+      "/Volumes/Projects"
+    ];
+  };
 
   pmset = {
     enable = true;
