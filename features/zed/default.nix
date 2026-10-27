@@ -17,6 +17,7 @@
         log
         nix
         sql
+        svelte
         toml
         wgsl-wesl
         xml
