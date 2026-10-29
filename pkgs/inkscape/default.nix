@@ -1,28 +1,57 @@
 {
   lib,
-  fetchpatch,
-  unstable,
+  stdenvNoCC,
+  curl,
+  fetchurl,
+  gnused,
+  jq,
+  undmg,
+  writeShellApplication,
 }:
-let
-  # Tree row drag and drop trips the strcpy overflow check on Darwin. Fixed on
-  # gtk-3-24 but not in a release yet.
-  gtk3 = unstable.gtk3.overrideAttrs (old: {
-    patches = old.patches or [ ] ++ [
-      (fetchpatch {
-        url = "https://gitlab.gnome.org/GNOME/gtk/-/commit/234b385a476b50cea34fa70896b4be10a1de32da.patch";
-        hash = "sha256-FTyXMGD/kG1TRvReurwe/BPmNEQN7PxdmvOKTg1diMM=";
-      })
+
+# The nixpkgs build crashes on tree row drag and drop on Darwin.
+stdenvNoCC.mkDerivation rec {
+  pname = "inkscape";
+  version = "1.4.4";
+
+  src = fetchurl {
+    url = "https://media.inkscape.org/dl/resources/file/Inkscape-${version}_arm64.dmg";
+    hash = "sha256-6sypSrAeWUZ83VRSooZ8NzRFD5pM+zNGlWzJsH808/E=";
+  };
+
+  nativeBuildInputs = [ undmg ];
+
+  sourceRoot = ".";
+
+  installPhase = ''
+    runHook preInstall
+
+    mkdir -p "$out/Applications" "$out/bin"
+    cp -a Inkscape.app "$out/Applications"
+    ln -s "$out/Applications/Inkscape.app/Contents/MacOS/inkscape" "$out/bin/inkscape"
+
+    runHook postInstall
+  '';
+
+  # Any change to the bundle breaks the code signature.
+  dontFixup = true;
+
+  passthru.updateScript = writeShellApplication {
+    name = "inkscape-update";
+    runtimeInputs = [
+      curl
+      gnused
+      jq
     ];
-  });
-in
-# Unstable has the librsvg pixbuf loader fix for Darwin.
-(unstable.inkscape.override {
-  gtkmm3 = unstable.gtkmm3.override { inherit gtk3; };
-  gtksourceview4 = unstable.gtksourceview4.override { inherit gtk3; };
-  gtk-mac-integration = unstable.gtk-mac-integration.override { inherit gtk3; };
-}).overrideAttrs
-  (old: {
-    meta = old.meta // {
-      platforms = lib.platforms.darwin;
-    };
-  })
+    text = builtins.readFile ./update.sh;
+  };
+
+  meta = {
+    description = "Vector graphics editor";
+    homepage = "https://inkscape.org";
+    license = lib.licenses.gpl3Plus;
+    mainProgram = "inkscape";
+    platforms = [ "aarch64-darwin" ];
+    sourceProvenance = with lib.sourceTypes; [ binaryNativeCode ];
+  };
+}
