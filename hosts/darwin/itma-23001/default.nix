@@ -125,8 +125,7 @@
     # "unwrapped" to preserve signature for 1password.
     firefox-bin-unwrapped
     google-chrome
-    # 26.05 lacks the librsvg pixbuf loader fix for Darwin.
-    unstable.inkscape
+    inkscape
     podman
     podman-compose
     podman-desktop
