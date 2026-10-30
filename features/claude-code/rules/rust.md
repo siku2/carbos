@@ -122,3 +122,22 @@ Pin the toolchain with a committed `rust-toolchain.toml`. Use the
 [cellguard rustfmt.toml](https://github.com/stargrid-systems/cellguard/blob/main/rustfmt.toml)
 as the formatting style. It needs nightly rustfmt. Compilation stays on the
 pinned stable toolchain.
+
+## R14: allocations-flow-down
+
+Allocations flow down, not up. Don't return heap data that the caller could
+provide or that could be produced lazily. Text becomes a type that implements
+`Display`. Sequences are returned as `impl Iterator`. Output that must be
+materialized goes into a buffer or writer the caller passes in. Returning
+owned data is fine when ownership really moves, as in constructors.
+
+## R15: lazy-iterators
+
+Don't `collect()` just to iterate again, count or pass the result on. Take
+`impl IntoIterator` and return `impl Iterator`. If a collection is needed,
+the caller passes it in.
+
+## R16: no-stack-buffers
+
+Don't replace a heap allocation with a fixed-size stack buffer. A stack array
+is fine only when a hard bound sets its size, never a guess.
