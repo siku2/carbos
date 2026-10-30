@@ -26,6 +26,6 @@ in
       fileset = manifests;
     };
     fetcherVersion = 4;
-    hash = "sha256-2s1y9ddE+NvxCxv5HcRS1M7G/3TMafmg6SKzwPMsPNs=";
+    hash = "sha256-ohAUMoaif3KxIGSnql3Qjx9AohydnOlrcxPHfPhw0v0=";
   };
 }
