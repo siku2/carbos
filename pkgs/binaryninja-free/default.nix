@@ -11,11 +11,11 @@
 
 stdenvNoCC.mkDerivation rec {
   pname = "binaryninja-free";
-  version = "6.0.10601";
+  version = "6.0.10905";
 
   src = fetchurl {
     url = "https://github.com/Vector35/binaryninja-api/releases/download/stable/${version}/binaryninja_free_macosx.dmg";
-    hash = "sha256-sjqlwJJ+DJCsOn3TL0nXMt2lKbD2TO9mnB3bIpMuaMI=";
+    hash = "sha256-F4/uMj+YBrMO78gucdhQp4sqzUYreQq1ScEhxZ6iXuo=";
   };
 
   nativeBuildInputs = [ undmg ];

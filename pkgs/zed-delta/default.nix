@@ -11,11 +11,11 @@
 
 stdenvNoCC.mkDerivation rec {
   pname = "zed-delta";
-  version = "0.21.0";
+  version = "0.23.0";
 
   src = fetchurl {
     url = "https://releases.delta.dev/releases/stable/${version}/macos/aarch64/Delta.app.zip";
-    hash = "sha256-9T1DoNEyrGxlYVqhAthRcFgka9L3SPEKM9Qx7R0j2q0=";
+    hash = "sha256-2/ri+IEXATFcMghTRjWbVRHA4zdDvyoxhzA1r+GSu30=";
   };
 
   nativeBuildInputs = [ unzip ];

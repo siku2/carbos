@@ -10,8 +10,8 @@
 }:
 
 let
-  version = "2.42304.2";
-  commit = "af65c0e384c1657459441aac3083c6e622789afe";
+  version = "4.4212.0";
+  commit = "cbfe3c56d49c49332ad5a9588303c9dbc70a5e7f";
 in
 stdenvNoCC.mkDerivation {
   pname = "claude-desktop";
@@ -19,7 +19,7 @@ stdenvNoCC.mkDerivation {
 
   src = fetchurl {
     url = "https://downloads.claude.ai/releases/darwin/universal/${version}/Claude-${commit}.zip";
-    hash = "sha256-+X7j4yPf7tAZVD2zZsT7wwy9PBBIH+eKMx/TB8LAg6s=";
+    hash = "sha256-4eFE4g2Y55MTX1hOupLj2PowqBUfbfQL8QhGrkB95fs=";
   };
 
   nativeBuildInputs = [ unzip ];

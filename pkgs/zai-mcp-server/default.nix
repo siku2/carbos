@@ -14,11 +14,11 @@
 
 buildNpmPackage (finalAttrs: {
   pname = "zai-mcp-server";
-  version = "0.1.5";
+  version = "0.1.6";
 
   src = fetchurl {
     url = "https://registry.npmjs.org/@z_ai/mcp-server/-/mcp-server-${finalAttrs.version}.tgz";
-    hash = "sha256-faQQkRDjn1tSHy5asI8jtToi8gGfBwMT+gEfCW6e1BU=";
+    hash = "sha256-bPZ67b2fW6UBQMv10rCuLa4RF+xLFUDPY+79vuVAHFI=";
   };
 
   # The registry tarball ships prebuilt JavaScript but no lockfile.
@@ -27,7 +27,7 @@ buildNpmPackage (finalAttrs: {
     ${lib.getExe' nodejs "npm"} pkg delete scripts.prepare
   '';
 
-  npmDepsHash = "sha256-rtuyCucm1efHhsgPYHdl55mHWJfwqmaUcHqNQjMHzXo=";
+  npmDepsHash = "sha256-5ukQ12LXMRpH/lkeh9n/krPULr4xt/kD5ppx8sEBm3U=";
   dontNpmBuild = true;
 
   passthru.updateScript = writeShellApplication {

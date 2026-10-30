@@ -6,15 +6,15 @@
 
 rustPlatform.buildRustPackage rec {
   pname = "cargo-clean-all";
-  version = "0.6.5";
+  version = "0.6.6";
 
   src = fetchFromGitHub {
     owner = "dnlmlr";
     repo = "cargo-clean-all";
     rev = "v${version}";
-    hash = "sha256-CJzjw/g0Ap7TKC2m+bVlH+/iCUOQITmE6HGvrNzWQ3o=";
+    hash = "sha256-RPDxeoUoAXNFh2ZabHigmwlztyRG9l9zez1UulrtNyo=";
   };
-  cargoHash = "sha256-9Qv2/XacE82AtZCZS5vtSeVdnD6Ugs+Qn/EVevMndQM=";
+  cargoHash = "sha256-s/xOS86ncB3gxGiZIXantF/ID/LhpMEkmtD0r8E1/bA=";
 
   passthru.updateScript = nix-update-script { extraArgs = [ "--flake" ]; };
 }
