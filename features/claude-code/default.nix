@@ -89,6 +89,7 @@ in
         context = ./CLAUDE.md;
         rules = {
           cargo = ./rules/cargo.md;
+          github-actions = ./rules/github-actions.md;
           rust = ./rules/rust.md;
         };
         skills.create-pr = ./skills/create-pr.md;
