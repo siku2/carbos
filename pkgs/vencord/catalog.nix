@@ -6,6 +6,7 @@
 # Names of the plugins Vencord ships and of ours in userplugins.
 vencord.overrideAttrs (old: {
   pname = "vencord-plugins.json";
+  inherit (vencord) pnpmDeps;
 
   nativeBuildInputs = old.nativeBuildInputs ++ [ jq ];
 

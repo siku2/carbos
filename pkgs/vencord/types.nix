@@ -2,6 +2,7 @@
 # Vencord's own release flow for @vencord/types, built from the source we ship.
 vencord.overrideAttrs {
   pname = "vencord-types";
+  inherit (vencord) pnpmDeps;
 
   buildPhase = ''
     runHook preBuild
