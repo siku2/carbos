@@ -201,11 +201,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793310507,
-        "narHash": "sha256-V7Tbc3mP0VfA2cYfTP/+afAy1SiVx/4j6qoKSG28lBw=",
+        "lastModified": 1793327368,
+        "narHash": "sha256-0XwKE0qRIwzIh+5OGtMO3Q0mZ3urIqCXpvywRcGu8x4=",
         "ref": "refs/heads/main",
-        "rev": "fc3ea02bf406ad7ef92101a925cefef10ce6a75e",
-        "revCount": 22,
+        "rev": "60f8258055186cf08b57fe6885894244af2ca3c2",
+        "revCount": 26,
         "type": "git",
         "url": "https://codeberg.org/inomotech/lux"
       },
