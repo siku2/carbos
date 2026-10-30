@@ -21,6 +21,7 @@
 
   services.lx = {
     enable = true;
+    memory = 8192;
     shares = [
       "/Users"
       "/Volumes/Projects"
