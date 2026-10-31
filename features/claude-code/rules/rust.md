@@ -123,21 +123,37 @@ Pin the toolchain with a committed `rust-toolchain.toml`. Use the
 as the formatting style. It needs nightly rustfmt. Compilation stays on the
 pinned stable toolchain.
 
-## R14: allocations-flow-down
+## R14: data-shape
 
-Allocations flow down, not up. Don't return heap data that the caller could
-provide or that could be produced lazily. Text becomes a type that implements
-`Display`. Sequences are returned as `impl Iterator`. Output that must be
-materialized goes into a buffer or writer the caller passes in. Returning
-owned data is fine when ownership really moves, as in constructors.
+Store data in the shape its consumers need: ordered, unique or keyed. A
+`collect()`, `sort` or `dedup` at the place of use means the producer has the
+wrong shape. Fix the producer instead. Sort only at an output boundary whose
+format dictates the order.
 
-## R15: lazy-iterators
+## R15: lazy-flow
 
-Don't `collect()` just to iterate again, count or pass the result on. Take
-`impl IntoIterator` and return `impl Iterator`. If a collection is needed,
-the caller passes it in.
+Data that only passes through stays lazy. Take `impl IntoIterator`, return
+`impl Iterator`, and borrow inputs that are only read. Don't `collect()` to
+iterate again, count or pass the result on. A function that returns
+`impl Iterator` is lazy in its body too. Output that must be materialized
+goes into a buffer or writer owned by whoever can reuse it. Judge by what
+allocates and copies, not by the signature.
 
 ## R16: no-stack-buffers
 
 Don't replace a heap allocation with a fixed-size stack buffer. A stack array
 is fine only when a hard bound sets its size, never a guess.
+
+## R17: single-owner
+
+Every value has one owner. Others borrow it or hold a typed id. Don't key a
+map with a clone of the stored value, and don't build derived data before
+someone asks for it. Names of entities, such as nets or pins, live in the
+table of their owner and are referred to by id. Messages and reports are
+structured data that is rendered to text at the output boundary.
+
+## R18: fallible-sequences
+
+Use `Item = Result` when items fail independently or when the first error
+ends the sequence. When the result is all or nothing, check first and then
+iterate plain values.
