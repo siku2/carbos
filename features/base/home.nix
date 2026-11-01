@@ -37,6 +37,10 @@
           HashKnownHosts = false;
           UserKnownHostsFile = "~/.ssh/known_hosts";
         };
+        carbon-x1 = {
+          hostname = "carbon-x1.local.bg12.ch";
+          user = "simon";
+        };
         mindaro = {
           hostname = "mindaro.local.bg12.ch";
           user = "simon";

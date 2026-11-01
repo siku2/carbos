@@ -18,6 +18,7 @@
     desktop
     firmware
     mic
+    remote
     rlbot
     vesktop
   ]);
