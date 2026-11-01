@@ -13,6 +13,7 @@ in
         };
         modules = [
           ../hosts/nixos/${name}
+          inputs.self.modules.nixos.registry
           inputs.self.modules.nixos.user
           inputs.disko.nixosModules.disko
           inputs.home-manager.nixosModules.home-manager
@@ -28,6 +29,7 @@ in
         };
         modules = [
           ../hosts/darwin/${name}
+          inputs.self.modules.darwin.registry
           inputs.self.modules.darwin.user
           inputs.home-manager.darwinModules.home-manager
         ];

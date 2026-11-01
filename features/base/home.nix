@@ -1,4 +1,9 @@
-{ osConfig, pkgs, ... }:
+{
+  lib,
+  osConfig,
+  pkgs,
+  ...
+}:
 {
   home = {
     stateVersion = "26.05";
@@ -37,19 +42,11 @@
           HashKnownHosts = false;
           UserKnownHostsFile = "~/.ssh/known_hosts";
         };
-        carbon-x1 = {
-          hostname = "carbon-x1.local.bg12.ch";
-          user = "simon";
-        };
-        mindaro = {
-          hostname = "mindaro.local.bg12.ch";
-          user = "simon";
-        };
-        station-h7 = {
-          hostname = "station-h7.local.bg12.ch";
-          user = "simon";
-        };
-      };
+      }
+      // lib.mapAttrs (_: host: {
+        hostname = host.fqdn;
+        user = osConfig.carbos.user.login;
+      }) osConfig.carbos.registry.hosts;
     };
   };
 }

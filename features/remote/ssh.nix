@@ -1,4 +1,7 @@
-{ config, ... }:
+{ config, lib, ... }:
+let
+  inherit (config.carbos.registry) hosts sshKeys;
+in
 {
   services.openssh = {
     enable = true;
@@ -10,7 +13,10 @@
     };
   };
 
-  users.users.${config.carbos.user.login}.openssh.authorizedKeys.keys = [
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJc/x0F5XV2bnqHZFHZUlPmY/D24+mxhAWOR8D5LjyVi carbon-x1"
-  ];
+  users.users.${config.carbos.user.login}.openssh.authorizedKeys.keys = [ sshKeys.carbon-x1 ];
+
+  programs.ssh.knownHosts = lib.mapAttrs (_: host: {
+    hostNames = [ host.fqdn ];
+    publicKey = host.hostKey;
+  }) (lib.filterAttrs (_: host: host.hostKey != null) hosts);
 }
