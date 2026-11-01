@@ -14,11 +14,11 @@
 # ships it for Windows, but fwupd flashes the images inside.
 stdenvNoCC.mkDerivation rec {
   pname = "lenovo-hybrid-dock-firmware";
-  version = "1.0.40";
+  version = "1.0.42";
 
   src = fetchurl {
-    url = "https://download.lenovo.com/pccbbs/mobiles/fhybd1040_2.exe";
-    hash = "sha256-yw+4YHgjG4nzWaFooz59Tg+tjMfMl83rNkqWgWrqJPc=";
+    url = "https://download.lenovo.com/pccbbs/mobiles/fhybd1042_1.exe";
+    hash = "sha256-i6D2KpPmGpy8RjaEBalVKfFlg7i/QoTbB0+H+etxkyU=";
   };
 
   nativeBuildInputs = [ innoextract ];

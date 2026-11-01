@@ -6,11 +6,11 @@
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "rlbot-server";
-  version = "5.0.0-rc17";
+  version = "5.0.0-rc18";
 
   src = fetchurl {
     url = "https://github.com/RLBot/core/releases/download/v${finalAttrs.version}/RLBotServer";
-    hash = "sha256-Rvi3BUuYYio3F/nJ/nvlIHhBzkt6jrTNMcU3T5X2Vtw=";
+    hash = "sha256-ZUk87Af/3atQjtyyLjlPew8wBC+hd33FikUFcSA+dgM=";
     executable = true;
   };
 

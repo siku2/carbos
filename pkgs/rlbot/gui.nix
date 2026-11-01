@@ -12,11 +12,11 @@
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "rlbot-gui";
-  version = "beat24";
+  version = "beta26";
 
   src = fetchurl {
     url = "https://github.com/RLBot/gui/releases/download/${finalAttrs.version}/rlbotgui";
-    hash = "sha256-qQfEC/6TMACoxZt0CPeIJTZCsQvOAPKosDhBxK1tAQM=";
+    hash = "sha256-JDAXI0LpWnTzB4rv9wAB96Hf+B5fskVby0/T2lJK/lg=";
     executable = true;
   };
 
