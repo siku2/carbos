@@ -7,7 +7,14 @@
 
   boot.plymouth.enable = true;
 
-  boot.kernelParams = [ "quiet" ];
+  boot.kernelParams = [
+    "quiet"
+    # A hard lockup panics and reboots. systemd-pstore keeps the log.
+    "nmi_watchdog=panic"
+    "panic=10"
+  ];
+
+  boot.kernel.sysctl."kernel.sysrq" = 1;
 
   nix.settings = {
     experimental-features = [
