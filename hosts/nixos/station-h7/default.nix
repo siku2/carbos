@@ -8,6 +8,7 @@
     inputs.chaotic.nixosModules.default
     ./audio.nix
     ./disk.nix
+    ./firmware.nix
     ./gaming.nix
     ./hardware.nix
   ]
@@ -15,6 +16,7 @@
     ardour
     base
     desktop
+    firmware
     mic
     rlbot
     vesktop
