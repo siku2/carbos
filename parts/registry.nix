@@ -10,6 +10,45 @@ let
   sshKeyName = types.enum (lib.attrNames cfg.sshKeys);
   resolveSshKey = name: if name == null then null else cfg.sshKeys.${name};
 
+  buildMachine = types.submodule {
+    options = {
+      systems = mkOption {
+        type = types.listOf types.str;
+        default = [ "x86_64-linux" ];
+      };
+      maxJobs = mkOption {
+        type = types.ints.positive;
+      };
+      speedFactor = mkOption {
+        type = types.ints.positive;
+        default = 1;
+      };
+      supportedFeatures = mkOption {
+        type = types.listOf types.str;
+        default = [
+          "big-parallel"
+          "benchmark"
+          "kvm"
+          "nixos-test"
+        ];
+      };
+    };
+  };
+
+  builder = types.submodule {
+    options = {
+      key = mkOption {
+        type = sshKeyName;
+        apply = resolveSshKey;
+        description = "Public half of /etc/nix/builder_ed25519, which root uses to reach the build machines.";
+      };
+      machines = mkOption {
+        type = types.listOf (types.enum (lib.attrNames cfg.hosts));
+        description = "Hosts to offload builds to.";
+      };
+    };
+  };
+
   host = types.submodule (
     { name, ... }:
     {
@@ -23,6 +62,16 @@ let
           default = null;
           apply = resolveSshKey;
           description = "The ed25519 host key of sshd.";
+        };
+        buildMachine = mkOption {
+          type = types.nullOr buildMachine;
+          default = null;
+          description = "Accept builds from the hosts that list this one in builder.machines.";
+        };
+        builder = mkOption {
+          type = types.nullOr builder;
+          default = null;
+          description = "Offload builds to other hosts.";
         };
       };
     }
