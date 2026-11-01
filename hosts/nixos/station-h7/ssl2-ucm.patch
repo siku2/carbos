@@ -1,0 +1,36 @@
+--- a/ucm2/USB-Audio/SolidStateLabs/SSL2.conf
++++ b/ucm2/USB-Audio/SolidStateLabs/SSL2.conf
+@@ -23,6 +23,18 @@
+ 	True.Define.DirectCaptureChannels 2
+ }
+ 
++If.fw116 {
++	Condition {
++		Type RegexMatch
++		String "${sys-card:device/../bcdDevice}"
++		Regex "01(1[6-9]|[2-9].)"
++	}
++	True.Define {
++		DirectPlaybackChannels 6
++		DirectCaptureChannels 8
++	}
++}
++
+ SectionUseCase."HiFi" {
+ 	Comment "HiFi"
+ 	File "/USB-Audio/SolidStateLabs/SSL2-HiFi.conf"
+--- a/ucm2/USB-Audio/SolidStateLabs/SSL2-HiFi.conf
++++ b/ucm2/USB-Audio/SolidStateLabs/SSL2-HiFi.conf
+@@ -15,9 +15,9 @@
+ 
+ If.chn4 {
+ 	Condition {
+-		Type String
+-		String1 "${var:DirectPlaybackChannels}"
+-		String2 "4"
++		Type RegexMatch
++		String "${var:DirectPlaybackChannels}"
++		Regex "^(4|6)$"
+ 	}
+ 	True {
+ 		Macro [
