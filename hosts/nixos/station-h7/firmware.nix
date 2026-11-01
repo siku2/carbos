@@ -12,6 +12,19 @@ in
       method.esp = { inherit (bios) image; };
     };
 
+    gpu = {
+      description = "ASUS TUF RX 7900 XTX VBIOS";
+      package = firmware.asus-tuf-rx7900xtx;
+      method.amdGpu = {
+        instanceId = "AMD\\115-D702BS";
+        partNumber = "115-D702BS0-101";
+        images = [
+          "p.rom"
+          "q.rom"
+        ];
+      };
+    };
+
     ssd = {
       description = "Samsung 990 PRO 2TB";
       package = firmware.samsung-990-pro;
