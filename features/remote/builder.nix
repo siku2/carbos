@@ -17,7 +17,7 @@ lib.mkMerge [
       write = true;
       # The paths clients send are unsigned.
       trusted = true;
-      keys = lib.mapAttrsToList (_: host: host.builder.key) clients;
+      keys = lib.mapAttrsToList (_: host: host.builder.key.line) clients;
     };
   })
 

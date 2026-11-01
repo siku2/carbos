@@ -13,10 +13,10 @@ in
     };
   };
 
-  users.users.${config.carbos.user.login}.openssh.authorizedKeys.keys = [ sshKeys.carbon-x1 ];
+  users.users.${config.carbos.user.login}.openssh.authorizedKeys.keys = [ sshKeys.carbon-x1.line ];
 
   programs.ssh.knownHosts = lib.mapAttrs (_: host: {
     hostNames = [ host.fqdn ];
-    publicKey = host.hostKey;
+    publicKey = host.hostKey.line;
   }) (lib.filterAttrs (_: host: host.hostKey != null) hosts);
 }

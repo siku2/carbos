@@ -4,11 +4,38 @@ let
 
   cfg = config.carbos.registry;
 
-  sshKey = types.strMatching "ssh-ed25519 [A-Za-z0-9+/]+=* ?.*";
+  sshKey = types.submodule (
+    { config, ... }:
+    {
+      options = {
+        algorithm = mkOption {
+          type = types.enum [ "ssh-ed25519" ];
+        };
+        key = mkOption {
+          type = types.strMatching "[A-Za-z0-9+/]+=*";
+        };
+        comment = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+        };
+        line = mkOption {
+          type = types.str;
+          readOnly = true;
+          default = lib.concatStringsSep " " (
+            [
+              config.algorithm
+              config.key
+            ]
+            ++ lib.optional (config.comment != null) config.comment
+          );
+          description = "The key as a public key line.";
+        };
+      };
+    }
+  );
 
-  # Keys are referenced by their name in sshKeys and resolve to the key itself.
+  # A name in sshKeys, resolved to the key itself.
   sshKeyName = types.enum (lib.attrNames cfg.sshKeys);
-  resolveSshKey = name: if name == null then null else cfg.sshKeys.${name};
 
   buildMachine = types.submodule {
     options = {
@@ -39,7 +66,7 @@ let
     options = {
       key = mkOption {
         type = sshKeyName;
-        apply = resolveSshKey;
+        apply = name: cfg.sshKeys.${name};
         description = "Public half of /etc/nix/builder_ed25519, which root uses to reach the build machines.";
       };
       machines = mkOption {
@@ -58,10 +85,9 @@ let
           default = "${name}.local.bg12.ch";
         };
         hostKey = mkOption {
-          type = types.nullOr sshKeyName;
+          type = types.nullOr sshKey;
           default = null;
-          apply = resolveSshKey;
-          description = "The ed25519 host key of sshd.";
+          description = "The host key of sshd.";
         };
         buildMachine = mkOption {
           type = types.nullOr buildMachine;
@@ -98,7 +124,7 @@ in
     sshKeys = mkOption {
       type = types.attrsOf sshKey;
       default = { };
-      description = "Public keys. User keys are named after their entries in Vaultwarden.";
+      description = "Keys used to connect. User keys are named after their entries in Vaultwarden.";
     };
   };
 

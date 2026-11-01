@@ -7,7 +7,11 @@
       };
       mindaro = { };
       station-h7 = {
-        hostKey = "station-h7-host";
+        hostKey = {
+          algorithm = "ssh-ed25519";
+          key = "AAAAC3NzaC1lZDI1NTE5AAAAIMpPLhVnDKIb9YHHADrC8jscDpVAKXRhFaS0ZweFR8KU";
+          comment = "root@station-h7";
+        };
         buildMachine = {
           maxJobs = 8;
           speedFactor = 4;
@@ -16,9 +20,16 @@
     };
 
     sshKeys = {
-      carbon-x1 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJc/x0F5XV2bnqHZFHZUlPmY/D24+mxhAWOR8D5LjyVi carbon-x1";
-      carbon-x1-builder = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEb6hqkUuL+eDx7sTkBSoTbN4/iZ0+PIOnlyYdldiHn5 carbon-x1 builder";
-      station-h7-host = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMpPLhVnDKIb9YHHADrC8jscDpVAKXRhFaS0ZweFR8KU root@station-h7";
+      carbon-x1 = {
+        algorithm = "ssh-ed25519";
+        key = "AAAAC3NzaC1lZDI1NTE5AAAAIJc/x0F5XV2bnqHZFHZUlPmY/D24+mxhAWOR8D5LjyVi";
+        comment = "carbon-x1";
+      };
+      carbon-x1-builder = {
+        algorithm = "ssh-ed25519";
+        key = "AAAAC3NzaC1lZDI1NTE5AAAAIEb6hqkUuL+eDx7sTkBSoTbN4/iZ0+PIOnlyYdldiHn5";
+        comment = "carbon-x1 builder";
+      };
     };
   };
 }
