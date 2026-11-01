@@ -5,17 +5,21 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
+  writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 
 type Method =
   | { fwupd: { instanceId: string; images: string[] } }
   | { samsungNvme: { device: string } }
   | { xmos: { vendorId: string; productId: string; image: string } }
+  | { amdGpu: { instanceId: string; partNumber: string; images: string[] } }
   | { esp: { image: string } };
 
 interface Device {
@@ -96,48 +100,47 @@ function fwupdAdapter(
 ): Adapter {
   return {
     current: () => fwupd("fwupdmgr", method.instanceId)?.Version,
-    flash: () => {
-      // The daemon would hold the devices while fwupdtool writes.
-      write("systemctl", ["stop", "fwupd.service"]);
-      try {
-        let remaining = method.images;
-        // An image fwupd rejects, like one for the running slot, gets another
-        // try after the others.
-        for (
-          let pass = 0;
-          pass < method.images.length && remaining.length > 0;
-          pass++
-        ) {
-          remaining = remaining.filter((image) => {
-            const target = fwupd(
-              dryRun ? "fwupdmgr" : "fwupdtool",
-              method.instanceId,
-            );
-            if (target === undefined) {
-              throw new Failure(
-                `no fwupd device with instance ID ${method.instanceId}`,
-              );
-            }
-            const path = join(device.package, image);
-            return !write("fwupdtool", [
-              "install-blob",
-              path,
-              target.DeviceId,
-              "--assume-yes",
-              "--no-reboot-check",
-            ]);
-          });
-        }
-        if (remaining.length > 0) {
-          throw new Failure(
-            `fwupdtool did not install ${remaining.join(", ")}`,
-          );
-        }
-      } finally {
-        write("systemctl", ["start", "fwupd.service"]);
-      }
-    },
+    flash: () =>
+      fwupdInstall(
+        method.instanceId,
+        method.images.map((image) => join(device.package, image)),
+      ),
   };
+}
+
+function fwupdInstall(
+  instanceId: string,
+  paths: string[],
+  flags: string[] = [],
+): void {
+  // The daemon would hold the devices while fwupdtool writes.
+  write("systemctl", ["stop", "fwupd.service"]);
+  try {
+    let remaining = paths;
+    // An image fwupd rejects, like one for the running slot, gets another try
+    // after the others.
+    for (let pass = 0; pass < paths.length && remaining.length > 0; pass++) {
+      remaining = remaining.filter((path) => {
+        const target = fwupd(dryRun ? "fwupdmgr" : "fwupdtool", instanceId);
+        if (target === undefined) {
+          throw new Failure(`no fwupd device with instance ID ${instanceId}`);
+        }
+        return !write("fwupdtool", [
+          "install-blob",
+          path,
+          target.DeviceId,
+          "--assume-yes",
+          "--no-reboot-check",
+          ...flags,
+        ]);
+      });
+    }
+    if (remaining.length > 0) {
+      throw new Failure(`fwupdtool did not install ${remaining.join(", ")}`);
+    }
+  } finally {
+    write("systemctl", ["start", "fwupd.service"]);
+  }
 }
 
 interface SamsungUpdate {
@@ -300,6 +303,80 @@ function xmosAdapter(
   };
 }
 
+interface Atom {
+  version: string;
+  // Ends in the BIOS switch position, like 744CHB.22.1.2.12.AS01P.
+  model: string;
+}
+
+// The first ATOM image in a VBIOS dump or update ROM.
+function atom(path: string, type: "amd-gpu-atom" | "amd-gpu-psp"): Atom {
+  const xml = run("fwupdtool", ["firmware-parse", path, type]);
+  const tag = (name: string) =>
+    xml.match(new RegExp(`<${name}>([^<]*)</${name}>`))?.[1];
+  const version = tag("version");
+  const model = tag("model_name");
+  if (version === undefined || model === undefined) {
+    throw new Failure(`fwupdtool found no ATOM image in ${path}`);
+  }
+  return { version, model };
+}
+
+function amdGpuAdapter(
+  device: Device,
+  method: Extract<Method, { amdGpu: unknown }>["amdGpu"],
+): Adapter {
+  // The running VBIOS of the card with this part number. PCI addresses move
+  // when the iGPU gets toggled.
+  const running = (): Atom | undefined => {
+    const root = "/sys/bus/pci/devices";
+    const address = readdirSync(root).find((entry) => {
+      try {
+        const file = join(root, entry, "vbios_version");
+        return readFileSync(file, "utf8").trim() === method.partNumber;
+      } catch {
+        return false;
+      }
+    });
+    if (address === undefined) return undefined;
+    // fwupdtool needs a regular file.
+    const dump = join(mkdtempSync(join(tmpdir(), "vbios-")), "vbios.rom");
+    writeFileSync(
+      dump,
+      readFileSync(`/sys/kernel/debug/dri/${address}/amdgpu_vbios`),
+    );
+    try {
+      return atom(dump, "amd-gpu-atom");
+    } finally {
+      rmSync(dirname(dump), { recursive: true });
+    }
+  };
+  const position = (model: string) => model.slice(model.lastIndexOf("."));
+  return {
+    current: () => running()?.version,
+    flash: () => {
+      const model = running()?.model;
+      if (model === undefined) {
+        throw new Failure(`no GPU with VBIOS part number ${method.partNumber}`);
+      }
+      const image = method.images
+        .map((name) => join(device.package, name))
+        .find(
+          (path) =>
+            position(atom(path, "amd-gpu-psp").model) === position(model),
+        );
+      if (image === undefined) {
+        throw new Failure(`no image for the running VBIOS ${model}`);
+      }
+      console.log(`Running ${model}, image ${image}`);
+      // fwupd reports the part number suffix as the version, which stays the
+      // same across VBIOS releases.
+      fwupdInstall(method.instanceId, [image], ["--allow-reinstall"]);
+      console.log("The new VBIOS becomes active on the next reboot.");
+    },
+  };
+}
+
 function espAdapter(
   name: string,
   device: Device,
@@ -335,6 +412,7 @@ function adapter(name: string, device: Device, esp: string): Adapter {
   if ("samsungNvme" in method)
     return samsungAdapter(device, method.samsungNvme);
   if ("xmos" in method) return xmosAdapter(device, method.xmos);
+  if ("amdGpu" in method) return amdGpuAdapter(device, method.amdGpu);
   return espAdapter(name, device, method.esp, esp);
 }
 

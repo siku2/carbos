@@ -61,6 +61,26 @@ let
       image = image "The image in the package to send with xmosdfu.";
     };
 
+    amdGpu = method "Flash an AMD GPU VBIOS with fwupdtool." {
+      instanceId = mkOption {
+        type = types.str;
+        example = "AMD\\115-D702BS";
+        description = "The fwupd instance ID that finds the GPU.";
+      };
+      partNumber = mkOption {
+        type = types.str;
+        example = "115-D702BS0-101";
+        description = "The VBIOS part number, as amdgpu shows it in vbios_version.";
+      };
+      images = mkOption {
+        type = types.nonEmptyListOf types.str;
+        description = ''
+          Images in the package, one for each BIOS switch position. The flash
+          picks the one for the running position.
+        '';
+      };
+    };
+
     esp = method "Copy the image to the ESP for the firmware setup to flash." {
       image = image "The image in the package that the firmware setup flashes.";
     };
