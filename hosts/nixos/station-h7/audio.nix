@@ -42,4 +42,13 @@ in
     ];
   };
 
+  # Nothing plays audio through the GPU's display outputs.
+  services.pipewire.wireplumber.extraConfig."51-hdmi-disable" = {
+    "monitor.alsa.rules" = [
+      {
+        matches = [ { "device.name" = "alsa_card.pci-0000_10_00.1"; } ];
+        actions.update-props."device.disabled" = true;
+      }
+    ];
+  };
 }
