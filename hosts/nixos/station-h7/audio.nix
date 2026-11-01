@@ -42,11 +42,17 @@ in
     ];
   };
 
-  # Nothing plays audio through the GPU's display outputs.
+  # Nothing plays audio through the GPUs' display outputs. PCI addresses move
+  # when the iGPU is toggled in the BIOS, so match the IDs.
   services.pipewire.wireplumber.extraConfig."51-hdmi-disable" = {
     "monitor.alsa.rules" = [
       {
-        matches = [ { "device.name" = "alsa_card.pci-0000_10_00.1"; } ];
+        matches = [
+          {
+            "device.vendor.id" = "0x1002";
+            "device.product.id" = "~0x(ab30|1640)";
+          }
+        ];
         actions.update-props."device.disabled" = true;
       }
     ];
