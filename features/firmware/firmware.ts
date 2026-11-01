@@ -266,7 +266,6 @@ function usbRelease(vendorId: string, productId: string): string | undefined {
 }
 
 function xmosAdapter(
-  name: string,
   device: Device,
   method: Extract<Method, { xmos: unknown }>["xmos"],
 ): Adapter {
@@ -280,18 +279,12 @@ function xmosAdapter(
   return {
     current,
     flash: () => {
-      const version = current();
-      if (version === undefined) {
+      if (current() === undefined) {
         throw new Failure(
           `no USB device ${method.vendorId}:${method.productId}`,
         );
       }
-      const backups = "/var/lib/firmware/backups";
-      if (!dryRun) mkdirSync(backups, { recursive: true });
-      const backup = join(backups, `${name}-${version}.bin`);
-      if (!write("xmosdfu", [method.productId, "--upload", backup], env)) {
-        throw new Failure("xmosdfu could not read the current image");
-      }
+      // The factory image stays in flash next to the upgrade image.
       if (
         !write(
           "xmosdfu",
@@ -300,7 +293,7 @@ function xmosAdapter(
         )
       ) {
         throw new Failure(
-          `xmosdfu failed, restore with: xmosdfu ${method.productId} --download ${backup}`,
+          `xmosdfu failed, revert with: XMOSDFU_VID=${method.vendorId} xmosdfu ${method.productId} --revertfactory`,
         );
       }
     },
@@ -341,7 +334,7 @@ function adapter(name: string, device: Device, esp: string): Adapter {
   if ("fwupd" in method) return fwupdAdapter(device, method.fwupd);
   if ("samsungNvme" in method)
     return samsungAdapter(device, method.samsungNvme);
-  if ("xmos" in method) return xmosAdapter(name, device, method.xmos);
+  if ("xmos" in method) return xmosAdapter(device, method.xmos);
   return espAdapter(name, device, method.esp, esp);
 }
 
