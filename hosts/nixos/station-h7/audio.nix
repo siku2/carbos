@@ -2,7 +2,8 @@
 let
   # alsa-ucm-conf only knows the SSL 2 MkII from 1.2.16 on. Without it the mic
   # shows up as a 4 channel surround source instead of a mono Mic1. The patch
-  # adds the 6 out and 8 in layout of firmware 1.16.
+  # adds the 6 out and 8 in layout of firmware 1.16 and keeps outputs 3 and 4
+  # to the SSL 2+.
   alsa-ucm-conf = pkgs.unstable.alsa-ucm-conf.overrideAttrs (old: {
     patches = old.patches or [ ] ++ [ ./ssl2-ucm.patch ];
   });
@@ -18,7 +19,7 @@ in
     "monitor.alsa.rules" = [
       {
         matches = [
-          { "node.name" = "alsa_output.usb-Solid_State_Logic_SSL_2_Mk_II-00.HiFi__Line1__sink"; }
+          { "node.name" = "alsa_output.usb-Solid_State_Logic_SSL_2_Mk_II-00.HiFi__Line__sink"; }
         ];
         actions.update-props = {
           "node.description" = "Sennheiser HD 6XX";
@@ -40,4 +41,5 @@ in
       }
     ];
   };
+
 }

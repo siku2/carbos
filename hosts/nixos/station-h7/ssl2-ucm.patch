@@ -34,3 +34,48 @@
  	}
  	True {
  		Macro [
+@@ -53,21 +53,30 @@
+ 			}
+ 		}
+ 
+-		SectionDevice."Line2" {
+-			Comment "Line Outputs 3 + 4"
+-
+-			Value {
+-				PlaybackPriority 100
++		If.line2 {
++			Condition {
++				Type RegexMatch
++				String "${sys-card:device/../product}"
++				Regex "SSL 2\\+"
+ 			}
+-			Macro.pcm_split.SplitPCMDevice {
+-				Name "ssl2_stereo_out"
+-				Direction Playback
+-				HWChannels "${var:DirectPlaybackChannels}"
+-				Channels 2
+-				Channel0 2
+-				Channel1 3
+-				ChannelPos0 FL
+-				ChannelPos1 FR
++			True {
++				SectionDevice."Line2" {
++					Comment "Line Outputs 3 + 4"
++
++					Value {
++						PlaybackPriority 100
++					}
++					Macro.pcm_split.SplitPCMDevice {
++						Name "ssl2_stereo_out"
++						Direction Playback
++						HWChannels "${var:DirectPlaybackChannels}"
++						Channels 2
++						Channel0 2
++						Channel1 3
++						ChannelPos0 FL
++						ChannelPos1 FR
++					}
++				}
+ 			}
+ 		}
+ 	}
