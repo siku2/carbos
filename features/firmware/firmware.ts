@@ -368,6 +368,9 @@ function status(manifest: Manifest): void {
 }
 
 async function confirm(question: string): Promise<boolean> {
+  if (!process.stdin.isTTY) {
+    throw new Failure("stdin is not a terminal, pass --yes to flash");
+  }
   const prompt = createInterface({
     input: process.stdin,
     output: process.stdout,
