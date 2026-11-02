@@ -16,8 +16,8 @@ in
       description = "ASUS TUF RX 7900 XTX VBIOS";
       package = firmware.asus-tuf-rx7900xtx;
       method.amdGpu = {
-        instanceId = "AMD\\115-D702BS";
-        partNumber = "115-D702BS0-101";
+        pciId = "1002:744c";
+        subsystemId = "1043:0506";
         images = [
           "p.rom"
           "q.rom"
