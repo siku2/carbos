@@ -1,8 +1,12 @@
 { wayland-protocols, wayvnc }:
-# With wlr-screencopy, wayvnc allocates buffers on the first GPU it finds.
-# This takes the compositor's main device from linux-dmabuf feedback instead.
 wayvnc.overrideAttrs (old: {
-  patches = (old.patches or [ ]) ++ [ ./dmabuf-main-device.patch ];
+  patches = (old.patches or [ ]) ++ [
+    # With wlr-screencopy, wayvnc allocates buffers on the first GPU it finds.
+    # This takes the compositor's main device from linux-dmabuf feedback instead.
+    ./dmabuf-main-device.patch
+    # Crashes on disconnect after the captured output went away.
+    ./missing-output.patch
+  ];
 
   # The bundled protocol predates feedback.
   postPatch = (old.postPatch or "") + ''
