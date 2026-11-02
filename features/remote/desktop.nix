@@ -24,15 +24,19 @@ let
   # niri keeps transient output changes across config reloads, so the
   # previous mode and scale are saved and restored explicitly.
   enter = niriOutput "wayvnc-enter" ''
-    niri msg -j outputs | jq -r --arg o "$1" '
+    current=$(niri msg -j outputs | jq -r --arg o "$1" '
       .[] | select(.name == $o or "\(.make) \(.model) \(.serial)" == $o)
       | "\(.modes[.current_mode] | "\(.width)x\(.height)@\(.refresh_rate / 1000)") \(.logical.scale)"
-    ' >"$RUNTIME_DIRECTORY/output"
+    ')
+    # niri queues changes for missing outputs, which would outlive this session.
+    [[ -n $current ]] || exit 0
+    echo "$current" >"$RUNTIME_DIRECTORY/output"
     niri msg output "$1" mode "$2"
     niri msg output "$1" scale "$3"
   '';
 
   leave = niriOutput "wayvnc-leave" ''
+    [[ -s $RUNTIME_DIRECTORY/output ]] || exit 0
     read -r mode scale <"$RUNTIME_DIRECTORY/output"
     niri msg output "$1" mode "$mode"
     niri msg output "$1" scale "$scale"
