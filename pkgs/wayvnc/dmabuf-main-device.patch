@@ -1,0 +1,136 @@
+diff --git i/include/wayland.h w/include/wayland.h
+index 32e578e..a4631ad 100644
+--- i/include/wayland.h
++++ w/include/wayland.h
+@@ -19,6 +19,7 @@
+ #include "observer.h"
+ 
+ #include <stdbool.h>
++#include <sys/types.h>
+ // TODO: Remove this once wl_list is replaced with queue.h
+ #include <wayland-client-core.h>
+ 
+@@ -34,6 +35,7 @@
+ 	X(zwlr_output_power_manager_v1) \
+ 	X(zwlr_screencopy_manager_v1) \
+ 	X(zwlr_virtual_pointer_manager_v1) \
++	X(zwp_linux_dmabuf_feedback_v1) \
+ 	X(zwp_linux_dmabuf_v1) \
+ 	X(zwp_virtual_keyboard_manager_v1) \
+ 	X(zxdg_output_manager_v1)
+@@ -78,6 +80,8 @@ struct wayland {
+ 	struct wl_list seats;
+ 	struct wl_list toplevels;
+ 
++	dev_t dmabuf_main_device;
++
+ #define X(x) struct x* x;
+ 	X_WAYLAND_PROTOCOLS
+ #undef X
+diff --git i/src/screencopy.c w/src/screencopy.c
+index 09f3cd5..0e79311 100644
+--- i/src/screencopy.c
++++ w/src/screencopy.c
+@@ -127,6 +127,7 @@ static void screencopy_buffer_done(void* data,
+ 		config.stride = 0;
+ 		config.format = self->fourcc;
+ 		config.type = WV_BUFFER_DMABUF;
++		config.node = wayland->dmabuf_main_device;
+ 	} else
+ #endif
+ 	{
+diff --git i/src/wayland.c w/src/wayland.c
+index ce377a8..a4b03eb 100644
+--- i/src/wayland.c
++++ w/src/wayland.c
+@@ -27,6 +27,7 @@
+ #include <stdlib.h>
+ #include <string.h>
+ #include <sys/param.h>
++#include <unistd.h>
+ #include <wayland-client-protocol.h>
+ 
+ #include "ext-data-control-v1.h"
+@@ -150,6 +151,63 @@ static bool registry_add_toplevel(void* data, struct wl_registry* registry,
+ 	return false;
+ }
+ 
++static void dmabuf_feedback_done(void* data,
++		struct zwp_linux_dmabuf_feedback_v1* feedback)
++{
++}
++
++static void dmabuf_feedback_format_table(void* data,
++		struct zwp_linux_dmabuf_feedback_v1* feedback, int32_t fd,
++		uint32_t size)
++{
++	close(fd);
++}
++
++static void dmabuf_feedback_main_device(void* data,
++		struct zwp_linux_dmabuf_feedback_v1* feedback,
++		struct wl_array* device)
++{
++	struct wayland* self = data;
++
++	if (device->size != sizeof(dev_t))
++		return;
++
++	memcpy(&self->dmabuf_main_device, device->data, sizeof(dev_t));
++}
++
++static void dmabuf_feedback_tranche_done(void* data,
++		struct zwp_linux_dmabuf_feedback_v1* feedback)
++{
++}
++
++static void dmabuf_feedback_tranche_target_device(void* data,
++		struct zwp_linux_dmabuf_feedback_v1* feedback,
++		struct wl_array* device)
++{
++}
++
++static void dmabuf_feedback_tranche_formats(void* data,
++		struct zwp_linux_dmabuf_feedback_v1* feedback,
++		struct wl_array* indices)
++{
++}
++
++static void dmabuf_feedback_tranche_flags(void* data,
++		struct zwp_linux_dmabuf_feedback_v1* feedback, uint32_t flags)
++{
++}
++
++static const struct zwp_linux_dmabuf_feedback_v1_listener
++dmabuf_feedback_listener = {
++	.done = dmabuf_feedback_done,
++	.format_table = dmabuf_feedback_format_table,
++	.main_device = dmabuf_feedback_main_device,
++	.tranche_done = dmabuf_feedback_tranche_done,
++	.tranche_target_device = dmabuf_feedback_tranche_target_device,
++	.tranche_formats = dmabuf_feedback_tranche_formats,
++	.tranche_flags = dmabuf_feedback_tranche_flags,
++};
++
+ static void registry_add(void* data, struct wl_registry* registry,
+ 		uint32_t id, const char* interface, uint32_t version)
+ {
+@@ -202,8 +260,17 @@ static void registry_add(void* data, struct wl_registry* registry,
+ 	if (CHECK_BIND(wl_shm, 1))
+ 		return;
+ 
+-	if (CHECK_BIND(zwp_linux_dmabuf_v1, 3))
++	if (version >= 3 && CHECK_BIND(zwp_linux_dmabuf_v1, MIN(4, version))) {
++		if (version >= 4) {
++			self->zwp_linux_dmabuf_feedback_v1 =
++				zwp_linux_dmabuf_v1_get_default_feedback(
++						self->zwp_linux_dmabuf_v1);
++			zwp_linux_dmabuf_feedback_v1_add_listener(
++					self->zwp_linux_dmabuf_feedback_v1,
++					&dmabuf_feedback_listener, self);
++		}
+ 		return;
++	}
+ 
+ 	// TODO: Move output manager global into this
+ 	if (strcmp(interface, zwlr_output_manager_v1_interface.name) == 0
