@@ -61,25 +61,27 @@ let
       image = image "The image in the package to send with xmosdfu.";
     };
 
-    amdGpu = method "Flash an AMD GPU VBIOS with fwupdtool." {
-      instanceId = mkOption {
-        type = types.str;
-        example = "AMD\\115-D702BS";
-        description = "The fwupd instance ID that finds the GPU.";
-      };
-      partNumber = mkOption {
-        type = types.str;
-        example = "115-D702BS0-101";
-        description = "The VBIOS part number, as amdgpu shows it in vbios_version.";
-      };
-      images = mkOption {
-        type = types.nonEmptyListOf types.str;
-        description = ''
-          Images in the package, one for each BIOS switch position. The flash
-          picks the one for the running position.
-        '';
-      };
-    };
+    amdGpu =
+      method "Flash a Navi3x VBIOS through the PSP bootloader, in a boot that keeps the GPU off amdgpu."
+        {
+          pciId = mkOption {
+            type = types.strMatching "[0-9a-f]{4}:[0-9a-f]{4}";
+            example = "1002:744c";
+            description = "The vendor and device ID of the GPU.";
+          };
+          subsystemId = mkOption {
+            type = types.strMatching "[0-9a-f]{4}:[0-9a-f]{4}";
+            example = "1043:0506";
+            description = "The subsystem vendor and device ID, which tell the board apart.";
+          };
+          images = mkOption {
+            type = types.nonEmptyListOf types.str;
+            description = ''
+              Images in the package, one for each BIOS switch position. The flash
+              picks the one for the running position.
+            '';
+          };
+        };
 
     esp = method "Copy the image to the ESP for the firmware setup to flash." {
       image = image "The image in the package that the firmware setup flashes.";
@@ -112,8 +114,13 @@ let
     }
   );
 
+  gpus = lib.filter (device: device.method ? amdGpu) (lib.attrValues cfg.devices);
+  flashBoot = "firmware-flash";
+
   manifest = json.generate "firmware.json" {
     esp = "${config.boot.loader.efi.efiSysMountPoint}/firmware";
+    state = "/var/lib/firmware-flash";
+    inherit flashBoot;
     devices = lib.mapAttrs (_: device: {
       inherit (device) description version method;
       package = "${device.package}";
@@ -124,6 +131,7 @@ let
     name = "firmware";
     runtimeInputs = [
       config.services.fwupd.package
+      pkgs.amd-psp-flash
       pkgs.nodejs-slim
       pkgs.nvme-cli
       pkgs.xmosdfu
@@ -140,7 +148,46 @@ in
     description = "Devices whose firmware the firmware command updates.";
   };
 
-  config = {
-    environment.systemPackages = [ firmware ];
-  };
+  config = lib.mkMerge [
+    { environment.systemPackages = [ firmware ]; }
+
+    # The PSP bootloader only takes a VBIOS update until a driver loads its
+    # secure OS. This boot keeps the GPU on pci-stub and stops short of the
+    # desktop, flashes, then reboots into the default entry.
+    (lib.mkIf (gpus != [ ]) {
+      specialisation.${flashBoot}.configuration = {
+        boot.kernelParams = [
+          "pci-stub.ids=${lib.concatMapStringsSep "," (gpu: gpu.method.amdGpu.pciId) gpus}"
+          "systemd.unit=${flashBoot}.target"
+        ];
+        boot.plymouth.enable = lib.mkForce false;
+      };
+
+      systemd.targets.${flashBoot} = {
+        description = "Firmware flash boot";
+        requires = [ "multi-user.target" ];
+        wants = [ "${flashBoot}.service" ];
+        after = [ "multi-user.target" ];
+        unitConfig.AllowIsolate = true;
+      };
+
+      systemd.services.${flashBoot} = {
+        description = "Flash pending firmware";
+        after = [ "multi-user.target" ];
+        unitConfig = {
+          SuccessAction = "reboot";
+          FailureAction = "reboot";
+        };
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = "${lib.getExe firmware} run-pending";
+          StandardOutput = "journal+console";
+          StandardError = "journal+console";
+          # A killed stream leaves the inactive slot invalid, never the
+          # active one, so the bound only has to catch a hung bootloader.
+          TimeoutStartSec = "2h";
+        };
+      };
+    })
+  ];
 }

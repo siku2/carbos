@@ -8,18 +8,19 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 
 type Method =
   | { fwupd: { instanceId: string; images: string[] } }
   | { samsungNvme: { device: string } }
   | { xmos: { vendorId: string; productId: string; image: string } }
-  | { amdGpu: { instanceId: string; partNumber: string; images: string[] } }
+  | { amdGpu: { pciId: string; subsystemId: string; images: string[] } }
   | { esp: { image: string } };
 
 interface Device {
@@ -31,7 +32,23 @@ interface Device {
 
 interface Manifest {
   esp: string;
+  // Where flashes that need their own boot keep the pending job and result.
+  state: string;
+  // The specialisation that boots with the GPU on pci-stub.
+  flashBoot: string;
   devices: Record<string, Device>;
+}
+
+interface Pending {
+  device: string;
+  image: string;
+}
+
+interface Result {
+  device: string;
+  image: string;
+  time: string;
+  ok: boolean;
 }
 
 interface Adapter {
@@ -322,28 +339,67 @@ function atom(path: string, type: "amd-gpu-atom" | "amd-gpu-psp"): Atom {
   return { version, model };
 }
 
+interface PciDevice {
+  address: string;
+  driver: string | undefined;
+}
+
+// The GPU by its PCI and subsystem IDs, since the address moves when the
+// iGPU gets toggled and vbios_version only exists under amdgpu.
+function pciDevice(pciId: string, subsystemId: string): PciDevice | undefined {
+  const root = "/sys/bus/pci/devices";
+  const id = (entry: string, vendor: string, device: string) => {
+    const read = (file: string) =>
+      readFileSync(join(root, entry, file), "utf8")
+        .trim()
+        .replace(/^0x/, "");
+    return `${read(vendor)}:${read(device)}`;
+  };
+  const address = readdirSync(root).find(
+    (entry) =>
+      id(entry, "vendor", "device") === pciId &&
+      id(entry, "subsystem_vendor", "subsystem_device") === subsystemId,
+  );
+  if (address === undefined) return undefined;
+  const driver = join(root, address, "driver");
+  return {
+    address,
+    driver: existsSync(driver) ? basename(realpathSync(driver)) : undefined,
+  };
+}
+
+// The boot entry of the flash specialisation for the booted generation, so
+// the flash boot runs the same manifest.
+function flashEntry(specialisation: string): string {
+  const entries = JSON.parse(run("bootctl", ["list", "--json=short"])) as {
+    id: string;
+    isSelected: boolean;
+  }[];
+  const base = entries.find((entry) => entry.isSelected)?.id;
+  const id = base?.replace(/\.conf$/, `-specialisation-${specialisation}.conf`);
+  if (id === undefined || !entries.some((entry) => entry.id === id)) {
+    throw new Failure(
+      `no ${specialisation} boot entry for ${base ?? "the default"}`,
+    );
+  }
+  return id;
+}
+
 function amdGpuAdapter(
+  name: string,
   device: Device,
   method: Extract<Method, { amdGpu: unknown }>["amdGpu"],
+  manifest: Manifest,
 ): Adapter {
-  // The running VBIOS of the card with this part number. PCI addresses move
-  // when the iGPU gets toggled.
+  const find = () => pciDevice(method.pciId, method.subsystemId);
   const running = (): Atom | undefined => {
-    const root = "/sys/bus/pci/devices";
-    const address = readdirSync(root).find((entry) => {
-      try {
-        const file = join(root, entry, "vbios_version");
-        return readFileSync(file, "utf8").trim() === method.partNumber;
-      } catch {
-        return false;
-      }
-    });
-    if (address === undefined) return undefined;
+    const gpu = find();
+    if (gpu?.driver !== "amdgpu") return undefined;
     // fwupdtool needs a regular file.
     const dump = join(mkdtempSync(join(tmpdir(), "vbios-")), "vbios.rom");
     writeFileSync(
       dump,
-      readFileSync(`/sys/kernel/debug/dri/${address}/amdgpu_vbios`),
+      readFileSync(`/sys/kernel/debug/dri/${gpu.address}/amdgpu_vbios`),
     );
     try {
       return atom(dump, "amd-gpu-atom");
@@ -357,10 +413,10 @@ function amdGpuAdapter(
     flash: () => {
       const model = running()?.model;
       if (model === undefined) {
-        throw new Failure(`no GPU with VBIOS part number ${method.partNumber}`);
+        throw new Failure(`no GPU ${method.pciId} on amdgpu`);
       }
       const image = method.images
-        .map((name) => join(device.package, name))
+        .map((file) => join(device.package, file))
         .find(
           (path) =>
             position(atom(path, "amd-gpu-psp").model) === position(model),
@@ -368,13 +424,75 @@ function amdGpuAdapter(
       if (image === undefined) {
         throw new Failure(`no image for the running VBIOS ${model}`);
       }
+      run("amd-psp-flash", ["check", image]);
       console.log(`Running ${model}, image ${image}`);
-      // fwupd reports the part number suffix as the version, which stays the
-      // same across VBIOS releases.
-      fwupdInstall(method.instanceId, [image], ["--allow-reinstall"]);
-      console.log("The new VBIOS becomes active on the next reboot.");
+      // The PSP only takes the update before a driver loads its secure OS,
+      // so the flash runs in a boot that keeps the GPU on pci-stub.
+      const entry = flashEntry(manifest.flashBoot);
+      if (!write("bootctl", ["set-oneshot", entry])) {
+        throw new Failure(`bootctl could not select ${entry}`);
+      }
+      // Only after the one-shot, so a job never waits for a manual pick of
+      // the flash entry.
+      const pending: Pending = { device: name, image };
+      if (!dryRun) {
+        mkdirSync(manifest.state, { recursive: true });
+        writeFileSync(
+          join(manifest.state, "pending.json"),
+          JSON.stringify(pending),
+        );
+      }
+      console.log("The flash boot updates the VBIOS and reboots back.");
+      if (!write("systemctl", ["reboot"])) {
+        throw new Failure(
+          "the reboot failed, the next boot flashes. Cancel with bootctl set-oneshot ''",
+        );
+      }
     },
   };
+}
+
+// Runs in the flash boot. The service reboots back whatever the outcome.
+function runPending(manifest: Manifest): void {
+  const file = join(manifest.state, "pending.json");
+  if (!existsSync(file)) {
+    console.log("No pending flash.");
+    return;
+  }
+  const text = readFileSync(file, "utf8");
+  // A broken job must not come back in later flash boots.
+  rmSync(file);
+  let pending: Pending;
+  try {
+    pending = JSON.parse(text) as Pending;
+  } catch {
+    throw new Failure(`${file} is not a valid job: ${text}`);
+  }
+  const device = manifest.devices[pending.device];
+  if (device === undefined || !("amdGpu" in device.method)) {
+    throw new Failure(
+      `the pending flash is for unknown device ${pending.device}`,
+    );
+  }
+  const { pciId, subsystemId } = device.method.amdGpu;
+  const gpu = pciDevice(pciId, subsystemId);
+  if (gpu === undefined) {
+    throw new Failure(`no GPU ${pciId}`);
+  }
+  if (gpu.driver !== undefined && gpu.driver !== "pci-stub") {
+    throw new Failure(`${gpu.address} runs on ${gpu.driver}, not pci-stub`);
+  }
+  console.log(`${device.description}: flashing ${pending.image}`);
+  const ok = write("amd-psp-flash", [gpu.address, "flash", pending.image]);
+  const result: Result = { ...pending, time: new Date().toISOString(), ok };
+  writeFileSync(
+    join(manifest.state, `${pending.device}.json`),
+    JSON.stringify(result),
+  );
+  if (!ok)
+    throw new Failure(
+      `amd-psp-flash failed, see journalctl -b -1 -u firmware-flash`,
+    );
 }
 
 function espAdapter(
@@ -406,14 +524,15 @@ function espAdapter(
   };
 }
 
-function adapter(name: string, device: Device, esp: string): Adapter {
+function adapter(name: string, device: Device, manifest: Manifest): Adapter {
   const method = device.method;
   if ("fwupd" in method) return fwupdAdapter(device, method.fwupd);
   if ("samsungNvme" in method)
     return samsungAdapter(device, method.samsungNvme);
   if ("xmos" in method) return xmosAdapter(device, method.xmos);
-  if ("amdGpu" in method) return amdGpuAdapter(device, method.amdGpu);
-  return espAdapter(name, device, method.esp, esp);
+  if ("amdGpu" in method)
+    return amdGpuAdapter(name, device, method.amdGpu, manifest);
+  return espAdapter(name, device, method.esp, manifest.esp);
 }
 
 function state(current: string | undefined, version: string): string {
@@ -423,7 +542,7 @@ function state(current: string | undefined, version: string): string {
 
 function status(manifest: Manifest): void {
   const rows = Object.entries(manifest.devices).map(([name, device]) => {
-    const current = adapter(name, device, manifest.esp).current();
+    const current = adapter(name, device, manifest).current();
     return [
       name,
       current ?? "-",
@@ -441,6 +560,14 @@ function status(manifest: Manifest): void {
         .map((cell, column) => cell.padEnd(widths[column] ?? 0))
         .join("  ")
         .trimEnd(),
+    );
+  }
+  for (const name of Object.keys(manifest.devices)) {
+    const file = join(manifest.state, `${name}.json`);
+    if (!existsSync(file)) continue;
+    const result = JSON.parse(readFileSync(file, "utf8")) as Result;
+    console.log(
+      `\nLast ${name} flash at ${result.time}: ${result.ok ? "ok" : "failed"}, ${result.image}`,
     );
   }
 }
@@ -469,7 +596,7 @@ async function flash(
       `unknown device ${name}, one of: ${Object.keys(manifest.devices).join(", ")}`,
     );
   }
-  const target = adapter(name, device, manifest.esp);
+  const target = adapter(name, device, manifest);
   const current = target.current();
   if (current === undefined) {
     throw new Failure(`${name} is not connected`);
@@ -487,7 +614,8 @@ async function flash(
 }
 
 const usage = `usage: firmware [status]
-       firmware flash <device> [--yes] [--force] [--dry-run]`;
+       firmware flash <device> [--yes] [--force] [--dry-run]
+       firmware run-pending`;
 
 const [manifestPath, command = "status", ...rest] = process.argv.slice(2);
 if (manifestPath === undefined) {
@@ -503,6 +631,8 @@ try {
     status(manifest);
   } else if (command === "flash" && rest[0] !== undefined) {
     await flash(manifest, rest[0], rest.slice(1));
+  } else if (command === "run-pending") {
+    runPending(manifest);
   } else {
     console.error(usage);
     process.exitCode = 2;
