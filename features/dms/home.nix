@@ -1,3 +1,4 @@
+{ config, lib, ... }:
 {
   imports = [ ./module.nix ];
 
@@ -33,6 +34,9 @@
         "clipboard"
         "cpuUsage"
         "memUsage"
+      ]
+      ++ lib.optional (config.carbos.dms.plugins.gpuUsage.enable or false) "gpuUsage"
+      ++ [
         "notificationButton"
         "battery"
         "controlCenterButton"
