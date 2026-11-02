@@ -10,6 +10,8 @@ in
       PasswordAuthentication = false;
       KbdInteractiveAuthentication = false;
       PermitRootLogin = "no";
+      # Drops dead sessions, and with them their forwarded connections.
+      ClientAliveInterval = 10;
     };
   };
 
