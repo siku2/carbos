@@ -1,4 +1,5 @@
-_: {
+{ pkgs, ... }:
+{
   nixpkgs.hostPlatform = "x86_64-linux";
 
   boot = {
@@ -15,7 +16,10 @@ _: {
     bluetooth.enable = true;
     cpu.intel.updateMicrocode = true;
     enableRedistributableFirmware = true;
-    graphics.enable = true;
+    graphics = {
+      enable = true;
+      extraPackages = [ pkgs.intel-media-driver ];
+    };
   };
 
   # Synaptics 06cb:00bd. Also turns on PAM fprintAuth.
