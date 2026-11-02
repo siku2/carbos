@@ -40,6 +40,12 @@
     amdgpu.overdrive.enable = true;
   };
 
+  # In BACO the 7900 XTX misses DP hotplug, so a monitor turned on after boot
+  # stays dark. amdgpu enables runtime PM at probe, so this has to run on bind.
+  services.udev.extraRules = ''
+    ACTION=="bind", SUBSYSTEM=="pci", DRIVER=="amdgpu", ATTR{vendor}=="0x1002", ATTR{device}=="0x744c", ATTR{power/control}="on"
+  '';
+
   # When S3 aborts, systemd falls back to s2idle, which this board never
   # leaves on its own.
   systemd.sleep.settings.Sleep.SuspendState = "mem";
