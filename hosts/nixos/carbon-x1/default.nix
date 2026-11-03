@@ -9,9 +9,14 @@
     ./hardware.nix
   ]
   ++ (with inputs.self.modules.nixos; [
-    base
+    agents
     desktop
+    dev
+    git
+    nix
     remote
+    shell
+    system
     thinkpad
   ]);
 

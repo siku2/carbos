@@ -13,13 +13,18 @@
     ./hardware.nix
   ]
   ++ (with inputs.self.modules.nixos; [
+    agents
     ardour
-    base
     desktop
+    dev
     firmware
+    git
     mic
+    nix
     remote
     rlbot
+    shell
+    system
     vesktop
   ]);
 
