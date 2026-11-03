@@ -29,14 +29,10 @@
     ac.sleep = 0;
   };
 
-  nixpkgs = {
-    hostPlatform = "aarch64-darwin";
-    config.allowUnfree = true;
-  };
+  nixpkgs.hostPlatform = "aarch64-darwin";
 
   nix = {
     settings = {
-      experimental-features = "nix-command flakes external-builders";
       trusted-users = [
         "root"
         "simon"
@@ -51,30 +47,6 @@
       cores = 4;
 
       warn-large-path-threshold = "1G";
-    };
-
-    gc = {
-      automatic = true;
-      interval = [
-        {
-          Weekday = 1;
-          Hour = 12;
-          Minute = 30;
-        }
-      ];
-      options = "--delete-older-than 14d";
-    };
-
-    optimise = {
-      automatic = true;
-      # After the GC run above, so it scans fewer paths.
-      interval = [
-        {
-          Weekday = 1;
-          Hour = 13;
-          Minute = 30;
-        }
-      ];
     };
   };
 

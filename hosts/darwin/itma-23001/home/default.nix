@@ -47,11 +47,6 @@ in
     bash.enable = true;
     gpg.enable = true;
 
-    nh = {
-      enable = true;
-      flake = "/etc/nix-darwin";
-    };
-
     zed-editor.package = zed-editor;
   };
 
