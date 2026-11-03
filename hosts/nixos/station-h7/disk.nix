@@ -56,6 +56,7 @@ in
                   mountOptions = [
                     "compress=zstd"
                     "noatime"
+                    "x-gvfs-hide"
                   ];
                 };
                 # Already compressed, so zstd only costs cpu. Split from
