@@ -1,0 +1,11 @@
+{
+  "id": "systemStats",
+  "name": "System Stats",
+  "description": "Shows CPU, RAM and GPU usage while one of them is high",
+  "version": "1.0.0",
+  "author": "Simon Berger",
+  "icon": "monitoring",
+  "type": "widget",
+  "capabilities": ["dankbar-widget"],
+  "component": "./SystemStatsWidget.qml"
+}

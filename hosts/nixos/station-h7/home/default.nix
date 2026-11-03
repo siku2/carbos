@@ -18,10 +18,7 @@
     plugins.voiceCall.enable = true;
     bars.default.center = lib.mkAfter [ "voiceCall" ];
 
-    plugins.gpuUsage = {
-      enable = true;
-      settings.pciId = "1002:744c";
-    };
+    plugins.systemStats.settings.pciId = "1002:744c";
   };
 
   # Antialiasing renders at twice the canvas size. A full-width canvas at 2x

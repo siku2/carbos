@@ -1,4 +1,3 @@
-{ config, lib, ... }:
 {
   imports = [ ./module.nix ];
 
@@ -32,17 +31,14 @@
       right = [
         "systemTray"
         "clipboard"
-        "cpuUsage"
-        "memUsage"
-      ]
-      ++ lib.optional (config.carbos.dms.plugins.gpuUsage.enable or false) "gpuUsage"
-      ++ [
+        "systemStats"
         "notificationButton"
         "battery"
         "controlCenterButton"
       ];
     };
 
+    plugins.systemStats.enable = true;
     plugins.webSearch.enable = true;
   };
 }
