@@ -94,6 +94,8 @@ in
       }
     ) config.carbos.cloud.mounts;
 
+    gtk.gtk3.bookmarks = [ "file://${config.home.homeDirectory}/${dir}" ];
+
     systemd.user.services = lib.mapAttrs' (
       name: mount: lib.nameValuePair "cloud-${name}" (mountService name mount)
     ) config.carbos.cloud.mounts;
