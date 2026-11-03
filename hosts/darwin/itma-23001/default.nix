@@ -81,7 +81,6 @@
   system = {
     configurationRevision = inputs.self.rev or inputs.self.dirtyRev or null;
     stateVersion = 6;
-    primaryUser = "simon";
 
     defaults = {
       dock = {
@@ -109,8 +108,6 @@
       fi
     '';
   };
-
-  users.users.simon.home = "/Users/simon";
 
   networking.hostName = "itma-23001";
 

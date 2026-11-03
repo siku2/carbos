@@ -36,7 +36,10 @@ in
     system
     ./nixos.nix
   ];
-  flake.modules.darwin.user = system;
+  flake.modules.darwin.user.imports = [
+    system
+    ./darwin.nix
+  ];
 
   flake.modules.homeManager.user =
     { config, lib, ... }:
