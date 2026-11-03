@@ -3,7 +3,6 @@
     ./audio.nix
     ./default-apps.nix
     ./dms/nixos.nix
-    ./font-options.nix
     ./fonts.nix
     ./niri/nixos.nix
     ./nixos.nix

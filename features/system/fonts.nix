@@ -1,4 +1,5 @@
 {
+  config,
   lib,
   pkgs,
   ...
@@ -24,4 +25,9 @@
       };
     };
   };
+
+  config.fonts.packages = [
+    pkgs.inter
+    config.carbos.fonts.mono.package
+  ];
 }

@@ -38,7 +38,5 @@
         };
       };
     };
-
-    zed-editor.userSettings.buffer_font_family = osConfig.carbos.fonts.mono.name;
   };
 }
