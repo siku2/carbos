@@ -37,7 +37,6 @@ PluginComponent {
                 Avatar {
                     required property int index
                     participant: root.participants[index]
-                    showStatus: participant.self
                     width: root.avatarSize
                     height: width
                     anchors.verticalCenter: parent.verticalCenter
@@ -64,7 +63,6 @@ PluginComponent {
                 Avatar {
                     required property int index
                     participant: root.participants[index]
-                    showStatus: participant.self
                     width: root.avatarSize
                     height: width
                     anchors.horizontalCenter: parent.horizontalCenter

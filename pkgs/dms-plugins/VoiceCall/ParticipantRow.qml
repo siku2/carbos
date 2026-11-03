@@ -16,6 +16,7 @@ Item {
     Avatar {
         id: avatar
         participant: root.participant
+        showStatus: false
         width: 32
         height: 32
         anchors.verticalCenter: parent.verticalCenter

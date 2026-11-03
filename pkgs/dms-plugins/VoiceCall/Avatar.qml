@@ -7,7 +7,7 @@ DankCircularImage {
     id: root
 
     required property var participant
-    property bool showStatus: false
+    property bool showStatus: true
 
     readonly property bool deafened: participant.selfDeafened || participant.serverDeafened
     readonly property bool muted: participant.selfMuted || participant.serverMuted
