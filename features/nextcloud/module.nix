@@ -110,7 +110,7 @@ in
     }) cfg.accounts;
 
     accounts.calendar.accounts = lib.mapAttrs' (
-      name: account: lib.nameValuePair "nextcloud-${name}" (calendar name account)
+      name: account: lib.nameValuePair "nextcloud_${name}" (calendar name account)
     ) cfg.accounts;
   };
 }
