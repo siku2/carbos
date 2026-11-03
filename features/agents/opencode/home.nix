@@ -4,7 +4,7 @@
   ...
 }:
 let
-  secretspecManifest = ../../secretspec.toml;
+  secretspecManifest = ../../../secretspec.toml;
 
   opencodeWithSecrets = pkgs.writeShellScriptBin "opencode" ''
     exec ${lib.getExe pkgs.secretspec} --file ${secretspecManifest} run \

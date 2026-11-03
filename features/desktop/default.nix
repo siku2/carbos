@@ -17,7 +17,6 @@
       kicad
       nextcloud
       niri
-      opencode
       rbw
       secretspec
       wallpaper

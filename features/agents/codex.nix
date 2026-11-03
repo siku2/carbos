@@ -6,7 +6,7 @@ let
   '';
 in
 {
-  flake.modules.nixos.codex = system;
-  flake.modules.darwin.codex = system;
-  flake.modules.homeManager.codex.programs.codex.enable = true;
+  flake.modules.nixos.agents = system;
+  flake.modules.darwin.agents = system;
+  flake.modules.homeManager.agents.programs.codex.enable = true;
 }

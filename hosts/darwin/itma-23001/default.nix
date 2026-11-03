@@ -5,11 +5,9 @@
     inputs.lux.darwinModules.default
   ]
   ++ (with inputs.self.modules.darwin; [
-    claude-code
-    codex
+    agents
     direnv
     git
-    opencode
     packages
     pmset
     rdp

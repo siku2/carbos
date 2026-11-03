@@ -8,8 +8,7 @@
       ./vm.nix
     ]
     ++ (with inputs.self.modules.nixos; [
-      claude-code
-      codex
+      agents
       direnv
       git
       packages

@@ -6,7 +6,7 @@ let
   };
 in
 {
-  flake.modules.nixos.claude-code =
+  flake.modules.nixos.agents =
     { config, ... }:
     {
       imports = [ managedSettings ];
@@ -14,7 +14,7 @@ in
         config.carbos.claudeCode.managedSettings;
     };
 
-  flake.modules.darwin.claude-code =
+  flake.modules.darwin.agents =
     { config, ... }:
     {
       imports = [ managedSettings ];
@@ -24,7 +24,7 @@ in
       '';
     };
 
-  flake.modules.homeManager.claude-code =
+  flake.modules.homeManager.agents =
     { lib, pkgs, ... }:
     let
       marketplace = lib.importJSON "${inputs.claude-plugins-official}/.claude-plugin/marketplace.json";
