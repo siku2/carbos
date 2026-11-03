@@ -17,8 +17,8 @@ let
         exclude_hidden = true;
         extract_exif = true;
         merge_default_exclude_dirs = true;
-        # A WebDAV mount. Indexing it would crawl the server over the network.
-        exclude_dirs = [ "Nextcloud" ];
+        # Network mounts. Indexing them would crawl the servers.
+        exclude_dirs = [ "Cloud" ];
       }
       {
         path = config.carbos.user.projectsDirectory;
