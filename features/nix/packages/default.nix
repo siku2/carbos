@@ -1,6 +1,6 @@
 { inputs, lib, ... }:
 let
-  entries = builtins.readDir ../../pkgs;
+  entries = builtins.readDir ../../../pkgs;
   stray = lib.attrNames (lib.filterAttrs (_: type: type != "directory") entries);
   names =
     lib.throwIf (stray != [ ])
@@ -13,7 +13,7 @@ let
     lib.genAttrs names (
       name:
       let
-        path = ../../pkgs/${name};
+        path = ../../../pkgs/${name};
         namesake = lib.optionalAttrs (prev ? ${name}) { ${name} = prev.${name}; };
       in
       final.callPackage path (lib.intersectAttrs (lib.functionArgs (import path)) namesake)
@@ -54,7 +54,7 @@ let
           "${lib.getExe script} ${file}";
       # Overrides inherit the update scripts of nixpkgs, which only work there.
       position = builtins.unsafeGetAttrPos "updateScript" (package.passthru or { });
-      own = position != null && lib.hasPrefix (toString ../../pkgs) position.file;
+      own = position != null && lib.hasPrefix (toString ../../../pkgs) position.file;
     in
     lib.optional own "UPDATE_NIX_ATTR_PATH=${lib.concatStringsSep "." path} ${command}";
 
@@ -120,7 +120,7 @@ in
     };
 
   flake.modules = {
-    nixos.packages = packages;
-    darwin.packages = packages;
+    nixos.nix = packages;
+    darwin.nix = packages;
   };
 }

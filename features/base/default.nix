@@ -3,15 +3,13 @@
   flake.modules.nixos.base = {
     imports = [
       ./system.nix
-      ./unfree.nix
       ./user.nix
       ./vm.nix
     ]
     ++ (with inputs.self.modules.nixos; [
       agents
-      direnv
       git
-      packages
+      nix
       rust
       shell
       zed

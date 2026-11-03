@@ -6,9 +6,8 @@
   ]
   ++ (with inputs.self.modules.darwin; [
     agents
-    direnv
     git
-    packages
+    nix
     pmset
     remote
     rust

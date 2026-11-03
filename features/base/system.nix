@@ -1,4 +1,4 @@
-{ config, pkgs, ... }:
+{ pkgs, ... }:
 {
   system.nixos = {
     distroId = "carbos";
@@ -16,24 +16,6 @@
 
   boot.kernel.sysctl."kernel.sysrq" = 1;
 
-  nix.settings = {
-    experimental-features = [
-      "nix-command"
-      "flakes"
-    ];
-    auto-optimise-store = true;
-  };
-
-  programs.nh = {
-    enable = true;
-    flake = "/etc/nixos";
-    clean = {
-      enable = true;
-      dates = "weekly";
-      extraArgs = "--keep-since 30d";
-    };
-  };
-
   time.timeZone = "Europe/Zurich";
 
   i18n = {
@@ -50,10 +32,6 @@
   networking.networkmanager.enable = true;
 
   services.resolved.enable = true;
-
-  systemd.tmpfiles.rules = [
-    "d /etc/nixos 0755 ${config.carbos.user.login} users -"
-  ];
 
   services.pipewire = {
     enable = true;
