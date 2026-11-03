@@ -1,24 +1,21 @@
-{ config, lib, ... }:
-let
-  inherit (config.carbos.registry) hosts sshKeys;
-in
+{ lib, osConfig, ... }:
 {
-  services.openssh = {
+  programs.ssh = {
     enable = true;
-    startWhenNeeded = true;
+    enableDefaultConfig = false;
     settings = {
-      PasswordAuthentication = false;
-      KbdInteractiveAuthentication = false;
-      PermitRootLogin = "no";
-      # Drops dead sessions, and with them their forwarded connections.
-      ClientAliveInterval = 10;
-    };
+      "*" = {
+        AddKeysToAgent = "yes";
+        ControlMaster = "no";
+        ControlPath = "~/.ssh/master-%r@%n:%p";
+        ControlPersist = "no";
+        HashKnownHosts = false;
+        UserKnownHostsFile = "~/.ssh/known_hosts";
+      };
+    }
+    // lib.mapAttrs (_: host: {
+      hostname = host.fqdn;
+      user = osConfig.carbos.user.login;
+    }) osConfig.carbos.registry.hosts;
   };
-
-  users.users.${config.carbos.user.login}.openssh.authorizedKeys.keys = [ sshKeys.carbon-x1.line ];
-
-  programs.ssh.knownHosts = lib.mapAttrs (_: host: {
-    hostNames = [ host.fqdn ];
-    publicKey = host.hostKey.line;
-  }) (lib.filterAttrs (_: host: host.hostKey != null) hosts);
 }

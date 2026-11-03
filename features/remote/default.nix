@@ -3,9 +3,12 @@
     imports = [
       ./builder.nix
       ./desktop.nix
-      ./ssh.nix
+      ./sshd.nix
     ];
   };
 
-  flake.modules.homeManager.remote = ./rdp.nix;
+  flake.modules.homeManager.remote.imports = [
+    ./rdp.nix
+    ./ssh.nix
+  ];
 }
