@@ -23,13 +23,6 @@
   programs = {
     home-manager.enable = true;
 
-    fish = {
-      enable = true;
-      interactiveShellInit = ''
-        set -g fish_greeting
-      '';
-    };
-
     ssh = {
       enable = true;
       enableDefaultConfig = false;

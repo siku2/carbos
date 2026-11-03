@@ -1,18 +1,11 @@
+{ config, ... }:
 {
-  config,
-  pkgs,
-  ...
-}:
-{
-  programs.fish.enable = true;
-
   # Without this, the password options only apply when the account is created.
   users.mutableUsers = false;
 
   users.users.${config.carbos.user.login} = {
     isNormalUser = true;
     description = config.carbos.user.fullName;
-    shell = pkgs.fish;
     extraGroups = [
       "wheel"
       "dialout"
