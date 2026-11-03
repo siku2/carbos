@@ -22,7 +22,6 @@
       inherit (final.unstable)
         _1password-cli
         _1password-gui
-        atuin
         chatgpt
         claude-code
         codex
@@ -34,5 +33,12 @@
         teams
         zed-editor
         ;
+
+      # The atuin-ai session tests fail on darwin and Hydra has no build yet.
+      atuin =
+        if final.stdenv.hostPlatform.isDarwin then
+          final.unstable.atuin.overrideAttrs { doCheck = false; }
+        else
+          final.unstable.atuin;
     };
 }

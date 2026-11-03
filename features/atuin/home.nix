@@ -16,6 +16,15 @@ let
     text = builtins.readFile ./atuin-seed-key.sh;
   };
 
+  seedFromKeyring = pkgs.writeShellScript "atuin-key" ''
+    export KEY_PATH=${keyPath}
+    exec ${secretspec} --file ${secretspecManifest} run \
+      --scope atuin \
+      --caller atuin-key \
+      --reason "atuin needs its sync key to read the synced history" \
+      -- ${lib.getExe seedKey}
+  '';
+
   fishInit = pkgs.runCommand "atuin-init.fish" {
     nativeBuildInputs = [ pkgs.writableTmpDirAsHomeHook ];
   } "${lib.getExe config.programs.atuin.package} init fish > $out";
@@ -25,7 +34,9 @@ in
     enable = true;
     package = pkgs.atuin;
     # Atuin generates a random key if none exists, so wait for the seeded one.
+    enableBashIntegration = false;
     enableFishIntegration = false;
+    enableZshIntegration = false;
     settings = {
       update_check = false;
       enter_accept = true;
@@ -45,6 +56,12 @@ in
     end
   '';
 
+  programs.zsh.initContent = ''
+    if [[ -e ${keyPath} && $options[zle] = on ]]; then
+      eval "$(${lib.getExe config.programs.atuin.package} init zsh)"
+    fi
+  '';
+
   # Without the key a new machine starts its own history stream.
   systemd.user.services.atuin-key = {
     Unit = {
@@ -54,19 +71,20 @@ in
     };
     Service = {
       Type = "oneshot";
-      Environment = [ "KEY_PATH=${keyPath}" ];
-      ExecStart = ''
-        ${secretspec} --file ${secretspecManifest} run \
-          --scope atuin \
-          --caller atuin-key \
-          --reason "atuin needs its sync key to read the synced history" \
-          -- ${lib.getExe seedKey}
-      '';
+      ExecStart = "${seedFromKeyring}";
       # The keyring may come up after us. A key mismatch needs a human.
       Restart = "on-failure";
       RestartSec = 15;
       RestartPreventExitStatus = 2;
     };
     Install.WantedBy = [ "default.target" ];
+  };
+
+  launchd.agents.atuin-key = {
+    enable = true;
+    config = {
+      ProgramArguments = [ "${seedFromKeyring}" ];
+      RunAtLoad = true;
+    };
   };
 }
