@@ -7,7 +7,8 @@
 let
   inherit (lib) mkOption types;
 
-  root = "${config.home.homeDirectory}/Cloud";
+  dir = "Cloud";
+  mountRoot = "${config.xdg.stateHome}/cloud";
 
   secretspecManifest = ../../secretspec.toml;
   secretspec = lib.getExe pkgs.secretspec;
@@ -52,7 +53,7 @@ let
         --reason "rclone needs the password to mount ${name}")
       RCLONE_CONFIG_REMOTE_PASS=$(printf '%s' "$password" | ${rclone} obscure -)
       export RCLONE_CONFIG_REMOTE_PASS
-      exec ${rclone} mount remote: ${root}/${name} \
+      exec ${rclone} mount remote: ${mountRoot}/${name} \
         --vfs-cache-mode writes \
         --dir-cache-time 30s \
         --poll-interval 1m
@@ -67,9 +68,9 @@ let
     };
     Service = {
       Type = "notify";
-      ExecStartPre = "${pkgs.coreutils}/bin/mkdir -p ${root}/${name}";
+      ExecStartPre = "${pkgs.coreutils}/bin/mkdir -p ${mountRoot}/${name}";
       ExecStart = mountScript name mount;
-      ExecStop = "${pkgs.fuse3}/bin/fusermount3 -u ${root}/${name}";
+      ExecStop = "${pkgs.fuse3}/bin/fusermount3 -u ${mountRoot}/${name}";
       Restart = "on-failure";
       RestartSec = 10;
     };
@@ -80,11 +81,18 @@ in
   options.carbos.cloud.mounts = mkOption {
     type = types.attrsOf (types.submodule { options = { inherit webdav; }; });
     default = { };
-    description = "Remote storage, each mounted at ~/Cloud/<name>.";
+    description = "Remote storage, each linked at ~/Cloud/<name>.";
   };
 
   config = {
     home.packages = [ pkgs.rclone ];
+
+    home.file = lib.mapAttrs' (
+      name: _:
+      lib.nameValuePair "${dir}/${name}" {
+        source = config.lib.file.mkOutOfStoreSymlink "${mountRoot}/${name}";
+      }
+    ) config.carbos.cloud.mounts;
 
     systemd.user.services = lib.mapAttrs' (
       name: mount: lib.nameValuePair "cloud-${name}" (mountService name mount)
