@@ -9,7 +9,7 @@ let
   inherit (lib) mkOption types;
 
   cfg = config.carbos.nextcloud;
-  secretspecManifest = ../../secretspec.toml;
+  secretspecManifest = ../../../secretspec.toml;
 
   account =
     { name, config, ... }:

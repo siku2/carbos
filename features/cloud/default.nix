@@ -1,3 +1,6 @@
 {
-  flake.modules.homeManager.cloud = ./home.nix;
+  flake.modules.homeManager.cloud.imports = [
+    ./mounts.nix
+    ./nextcloud/home.nix
+  ];
 }

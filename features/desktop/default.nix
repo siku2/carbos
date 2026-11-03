@@ -15,7 +15,6 @@
       firefox
       fractal
       kicad
-      nextcloud
       niri
       rbw
       secretspec
