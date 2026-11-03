@@ -13,5 +13,11 @@
     ./unfree.nix
   ];
 
-  flake.modules.homeManager.nix = ./direnv.nix;
+  flake.modules.homeManager.nix =
+    { pkgs, ... }:
+    {
+      imports = [ ./direnv.nix ];
+
+      home.packages = [ pkgs.nixfmt ];
+    };
 }
