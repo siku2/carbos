@@ -64,14 +64,8 @@ in
         colorMoved = "default";
         mnemonicPrefix = true;
       };
-      commit = {
-        gpgsign = true;
-        verbose = true;
-      };
-      tag = {
-        forceSignAnnotated = true;
-        sort = "version:refname";
-      };
+      commit.verbose = true;
+      tag.sort = "version:refname";
       branch = {
         sort = "-committerdate";
         autoSetupMerge = "simple";

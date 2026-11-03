@@ -52,6 +52,12 @@ lib.mkIf (osConfig.carbos.vault.backend == "bitwarden") {
     Install.WantedBy = [ "graphical-session.target" ];
   };
 
+  # Held by rbw's SSH agent, never on disk.
+  carbos.git.signing = {
+    format = "ssh";
+    key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJc/x0F5XV2bnqHZFHZUlPmY/D24+mxhAWOR8D5LjyVi";
+  };
+
   # home.sessionVariables only reaches login shells. Apps launched from the
   # shell inherit from the systemd user manager, which reads environment.d.
   home.sessionVariables.SSH_AUTH_SOCK = sshAuthSock;

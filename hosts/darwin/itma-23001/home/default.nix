@@ -20,15 +20,5 @@
     username = "Administrator";
   };
 
-  programs = {
-    bash.enable = true;
-    gpg.enable = true;
-  };
-
-  services.gpg-agent = {
-    enable = true;
-    pinentry.package = pkgs.pinentry_mac;
-    defaultCacheTtl = 600;
-    maxCacheTtl = 7200;
-  };
+  programs.bash.enable = true;
 }

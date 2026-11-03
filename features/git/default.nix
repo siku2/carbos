@@ -1,5 +1,5 @@
 {
-  # Signing and credentials through rbw and the keyring.
+  # Credentials through the keyring.
   flake.modules.nixos.git.home-manager.sharedModules = [ ./nixos-home.nix ];
 
   flake.modules.darwin.git.home-manager.sharedModules = [ ./darwin-home.nix ];
@@ -8,5 +8,6 @@
     ./fj.nix
     ./gh.nix
     ./git.nix
+    ./signing.nix
   ];
 }
