@@ -32,12 +32,17 @@ let
     };
 in
 {
-  flake.modules.nixos.user = system;
+  flake.modules.nixos.user.imports = [
+    system
+    ./nixos.nix
+  ];
   flake.modules.darwin.user = system;
 
   flake.modules.homeManager.user =
     { config, lib, ... }:
     {
+      imports = [ ./home.nix ];
+
       options.carbos.user = {
         fullName = lib.mkOption {
           type = lib.types.str;

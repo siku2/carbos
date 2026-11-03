@@ -31,9 +31,6 @@ in
   carbos.user.projectsDirectory = "/Volumes/Projects";
 
   home = {
-    username = "simon";
-    stateVersion = "26.05";
-
     packages = with pkgs; [
       nil
       nixd
