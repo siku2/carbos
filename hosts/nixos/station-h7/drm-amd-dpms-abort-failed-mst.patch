@@ -1,0 +1,24 @@
+--- a/drivers/gpu/drm/amd/display/dc/link/link_dpms.c
++++ b/drivers/gpu/drm/amd/display/dc/link/link_dpms.c
+@@ -2802,11 +2802,20 @@
+ 
+ 		switch (step_result) {
+ 		case DC_DPMS_SUCCESS:
+-		case DC_DPMS_FAILED_HANDSHAKE:
+ 			// Enum is ordered from "best" to "worst" results
+ 			result = max(result, step_result);
+ 			break;
+ 
++		case DC_DPMS_FAILED_HANDSHAKE:
++			/*
++			 * enable_link() failed in a way that must abort the stream
++			 * enable (any non-training failure, or a training failure
++			 * on DP MST). Do not continue to post_enable_link: for MST
++			 * it would allocate a payload on an untrained link that is
++			 * never released, as before the DPMS ON split.
++			 */
++			return step_result;
++
+ 		case DC_DPMS_SKIPPED_HANDSHAKE:
+ 			return step_result;
+ 

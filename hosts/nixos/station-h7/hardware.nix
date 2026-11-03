@@ -15,6 +15,21 @@
     # It also carries CONFIG_AMD_PRIVATE_COLOR, which chaotic.hdr asserts on.
     kernelPackages = pkgs.linuxPackages_cachyos-lto-znver4;
 
+    # When the G95NC fails link training on wake, amdgpu 7.3 goes on to
+    # allocate an MST payload on the dead link instead of retrying, and the
+    # leaked start slot keeps the stream outside the payload table until
+    # reboot. drm/amd#6047, drm/amd#6049.
+    kernelPatches = [
+      {
+        name = "drm-dp-mst-start-slot";
+        patch = ./drm-dp-mst-start-slot.patch;
+      }
+      {
+        name = "drm-amd-dpms-abort-failed-mst";
+        patch = ./drm-amd-dpms-abort-failed-mst.patch;
+      }
+    ];
+
     initrd.availableKernelModules = [
       "nvme"
       "xhci_pci"

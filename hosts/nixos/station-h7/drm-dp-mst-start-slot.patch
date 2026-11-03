@@ -1,0 +1,31 @@
+--- a/drivers/gpu/drm/display/drm_dp_mst_topology.c
++++ b/drivers/gpu/drm/display/drm_dp_mst_topology.c
+@@ -3321,12 +3321,25 @@
+ 			     struct drm_dp_mst_topology_state *mst_state,
+ 			     struct drm_dp_mst_atomic_payload *payload)
+ {
++	struct drm_dp_mst_atomic_payload *pos;
+ 	struct drm_dp_mst_port *port;
++	int start = mst_state->start_slot;
++	int count = 0;
+ 	int ret;
+ 
+-	/* Update mst mgr info */
+-	if (mgr->payload_count == 0)
+-		mgr->next_start_slot = mst_state->start_slot;
++	/*
++	 * Derive the next start slot from the payloads that hold slots. A
++	 * payload whose allocation failed and was never removed would
++	 * otherwise shift every later payload past the end of the table.
++	 */
++	list_for_each_entry(pos, &mst_state->payloads, next) {
++		if (pos == payload || pos->vc_start_slot < 0)
++			continue;
++		start = max(start, pos->vc_start_slot + pos->time_slots);
++		count++;
++	}
++	mgr->payload_count = count;
++	mgr->next_start_slot = start;
+ 
+ 	payload->vc_start_slot = mgr->next_start_slot;
+ 
