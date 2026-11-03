@@ -10,7 +10,7 @@
     git
     packages
     pmset
-    rdp
+    remote
     rust
     secretspec
     shell

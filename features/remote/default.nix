@@ -6,4 +6,6 @@
       ./ssh.nix
     ];
   };
+
+  flake.modules.homeManager.remote = ./rdp.nix;
 }
