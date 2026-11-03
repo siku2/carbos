@@ -8,7 +8,6 @@
       ./nixos.nix
     ]
     ++ (with inputs.self.modules.nixos; [
-      atuin
       bitwarden
       cloud
       dms

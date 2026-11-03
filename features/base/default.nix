@@ -9,13 +9,12 @@
     ]
     ++ (with inputs.self.modules.nixos; [
       claude-code
-      cli
       codex
       direnv
       git
       packages
       rust
-      starship
+      shell
       zed
     ]);
   };

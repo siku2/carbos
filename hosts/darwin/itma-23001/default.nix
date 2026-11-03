@@ -5,9 +5,7 @@
     inputs.lux.darwinModules.default
   ]
   ++ (with inputs.self.modules.darwin; [
-    atuin
     claude-code
-    cli
     codex
     direnv
     git
@@ -16,7 +14,7 @@
     rdp
     rust
     secretspec
-    starship
+    shell
     zed
   ]);
 
