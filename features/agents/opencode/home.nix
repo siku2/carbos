@@ -54,4 +54,9 @@ in
       worker = ./agents/worker.md;
     };
   };
+
+  programs.git.ignores = [
+    "/AGENTS.md"
+    "/opencode.json"
+  ];
 }
