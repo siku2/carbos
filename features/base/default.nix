@@ -12,7 +12,6 @@
       cli
       codex
       direnv
-      gh
       git
       packages
       rust

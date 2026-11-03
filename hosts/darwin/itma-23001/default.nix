@@ -10,7 +10,6 @@
     cli
     codex
     direnv
-    gh
     git
     packages
     pmset
