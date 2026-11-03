@@ -1,1 +1,6 @@
-{ programs.starship.enable = true; }
+{
+  programs.starship = {
+    enable = true;
+    settings.gcloud.disabled = true;
+  };
+}

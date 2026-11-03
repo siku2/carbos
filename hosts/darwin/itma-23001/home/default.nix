@@ -3,7 +3,6 @@
   imports = [
     ./git.nix
     ./ssh.nix
-    ./zsh.nix
   ];
 
   carbos.user.projectsDirectory = "/Volumes/Projects";

@@ -1,5 +1,6 @@
 {
-  flake.modules.nixos.shell = ./nixos.nix;
+  flake.modules.nixos.shell = ./system.nix;
+  flake.modules.darwin.shell = ./system.nix;
 
   flake.modules.homeManager.shell.imports = [
     ./atuin.nix
