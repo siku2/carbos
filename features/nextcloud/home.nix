@@ -10,7 +10,10 @@
   carbos.nextcloud = {
     accounts = {
       bg12.server = "https://cloud.bg12.ch";
-      stargrid.server = "https://nextcloud.stargrid.systems";
+      stargrid = {
+        server = "https://nextcloud.stargrid.systems";
+        login = "simon@siku2.io";
+      };
     };
     defaultCalendar.account = "bg12";
   };

@@ -12,7 +12,7 @@ let
   secretspecManifest = ../../secretspec.toml;
 
   account =
-    { name, ... }:
+    { name, config, ... }:
     {
       options = {
         server = mkOption {
@@ -20,10 +20,18 @@ let
           example = "https://cloud.example.com";
         };
 
-        user = mkOption {
+        userId = mkOption {
           type = types.str;
           default = osConfig.carbos.user.login;
           defaultText = lib.literalExpression "osConfig.carbos.user.login";
+          description = "Internal user ID, as used in the WebDAV path.";
+        };
+
+        login = mkOption {
+          type = types.str;
+          default = config.userId;
+          defaultText = lib.literalExpression "userId";
+          description = "Login name. Can differ from the user ID, for example an email address.";
         };
 
         # A Nextcloud app password, not the login password. Settings > Security.
@@ -45,7 +53,7 @@ let
     remote = {
       type = "caldav";
       url = "${account.server}/remote.php/dav/";
-      userName = account.user;
+      userName = account.login;
       passwordCommand = [
         (lib.getExe pkgs.secretspec)
         "--file"
@@ -94,9 +102,10 @@ in
   config = {
     carbos.cloud.mounts = lib.mapAttrs (_: account: {
       webdav = {
-        url = "${account.server}/remote.php/dav/files/${account.user}/";
+        url = "${account.server}/remote.php/dav/files/${account.userId}/";
         vendor = "nextcloud";
-        inherit (account) user passwordSecret;
+        user = account.login;
+        inherit (account) passwordSecret;
       };
     }) cfg.accounts;
 
