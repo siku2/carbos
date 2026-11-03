@@ -13,7 +13,6 @@
     packages = with pkgs; [
       ansifilter
       devcontainer
-      forgejo-cli
     ];
   };
 

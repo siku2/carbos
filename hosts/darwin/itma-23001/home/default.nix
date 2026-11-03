@@ -35,7 +35,6 @@ in
     stateVersion = "26.05";
 
     packages = with pkgs; [
-      forgejo-cli
       nil
       nixd
       nixfmt
