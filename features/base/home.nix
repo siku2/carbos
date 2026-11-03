@@ -1,7 +1,6 @@
 {
   lib,
   osConfig,
-  pkgs,
   ...
 }:
 {
@@ -9,11 +8,6 @@
     stateVersion = "26.05";
     username = osConfig.carbos.user.login;
     homeDirectory = "/home/${osConfig.carbos.user.login}";
-
-    packages = with pkgs; [
-      ansifilter
-      devcontainer
-    ];
   };
 
   # Generating it pulls in an options.json derivation that nix warns about.

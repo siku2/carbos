@@ -6,14 +6,13 @@
   ]
   ++ (with inputs.self.modules.darwin; [
     agents
+    dev
     git
     nix
     pmset
     remote
-    rust
     shell
     vault
-    zed
   ]);
 
   services.lx = {

@@ -1,6 +1,6 @@
 { inputs, ... }:
 {
-  flake.modules.homeManager.zed =
+  flake.modules.homeManager.dev =
     {
       config,
       lib,

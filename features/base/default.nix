@@ -8,11 +8,10 @@
     ]
     ++ (with inputs.self.modules.nixos; [
       agents
+      dev
       git
       nix
-      rust
       shell
-      zed
     ]);
   };
 
