@@ -1,6 +1,7 @@
 {
   config,
   lib,
+  osConfig,
   pkgs,
   ...
 }:
@@ -40,7 +41,7 @@ let
     text = builtins.readFile ./bitwarden-settings.sh;
   };
 in
-{
+lib.mkIf (osConfig.carbos.vault.backend == "bitwarden") {
   home.packages = [
     pkgs.bitwarden-cli
     pkgs.bitwarden-desktop

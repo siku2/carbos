@@ -12,8 +12,8 @@
     pmset
     remote
     rust
-    secretspec
     shell
+    vault
     zed
   ]);
 
@@ -133,16 +133,12 @@
     zed-delta
   ];
 
-  programs = {
-    _1password.enable = true;
-    _1password-gui.enable = true;
-  };
-
   security.pam.services.sudo_local.touchIdAuth = true;
 
   documentation.enable = false;
 
   carbos.user.email = "simon.berger@inomotech.com";
+  carbos.vault.backend = "1password";
 
   home-manager.users.simon = ./home;
 }

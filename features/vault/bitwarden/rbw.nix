@@ -18,7 +18,7 @@ let
     ${lib.getExe config.programs.rbw.package} unlocked || true
   '';
 in
-{
+lib.mkIf (osConfig.carbos.vault.backend == "bitwarden") {
   programs.rbw = {
     enable = true;
     settings = {

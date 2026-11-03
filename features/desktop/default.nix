@@ -10,13 +10,11 @@
       ./nixos.nix
     ]
     ++ (with inputs.self.modules.nixos; [
-      bitwarden
       cloud
       firefox
       fractal
       kicad
-      rbw
-      secretspec
+      vault
     ]);
   };
 
