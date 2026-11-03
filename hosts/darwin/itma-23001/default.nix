@@ -9,9 +9,9 @@
     dev
     git
     nix
-    pmset
     remote
     shell
+    system
     vault
   ]);
 
@@ -51,21 +51,9 @@
   };
 
   system = {
-    configurationRevision = inputs.self.rev or inputs.self.dirtyRev or null;
     stateVersion = 6;
 
     defaults = {
-      dock = {
-        autohide = true;
-        # Never show on hover. Cmd-Opt-D still toggles it.
-        autohide-delay = 1000.0;
-        show-recents = false;
-        mru-spaces = false;
-      };
-
-      # Finder's "Remove items from the Trash after 30 days".
-      finder.FXRemoveOldTrashItems = true;
-
       CustomUserPreferences."com.microsoft.autoupdate2" = {
         HowToCheck = "Manual";
         StartDaemonOnAppLaunch = false;
@@ -99,10 +87,6 @@
     windows-app
     zed-delta
   ];
-
-  security.pam.services.sudo_local.touchIdAuth = true;
-
-  documentation.enable = false;
 
   carbos.user.email = "simon.berger@inomotech.com";
   carbos.vault.backend = "1password";
