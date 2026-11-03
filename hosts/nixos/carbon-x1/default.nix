@@ -10,14 +10,18 @@
   ]
   ++ (with inputs.self.modules.nixos; [
     agents
+    cloud
     desktop
     dev
+    firefox
     git
+    kicad
     nix
     remote
     shell
     system
     thinkpad
+    vault
   ]);
 
   networking.hostName = "carbon-x1";

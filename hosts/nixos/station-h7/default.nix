@@ -15,16 +15,20 @@
   ++ (with inputs.self.modules.nixos; [
     agents
     ardour
+    cloud
     desktop
     dev
+    firefox
     firmware
     git
+    kicad
     mic
     nix
     remote
     rlbot
     shell
     system
+    vault
     vesktop
   ]);
 

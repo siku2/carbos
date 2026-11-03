@@ -15,6 +15,9 @@
 
     packages = with pkgs; [
       file-roller
+      # No tray and no background mode, so notifications only arrive while a
+      # window is open.
+      fractal
       inkscape
       libsecret
       nautilus
