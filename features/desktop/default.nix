@@ -2,6 +2,7 @@
 {
   flake.modules.nixos.desktop = {
     imports = [
+      ./audio.nix
       ./default-apps.nix
       ./dms/nixos.nix
       ./font-options.nix
