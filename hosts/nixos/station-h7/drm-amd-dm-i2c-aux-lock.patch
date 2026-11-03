@@ -1,0 +1,28 @@
+--- a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm_connector.c
++++ b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm_connector.c
+@@ -3399,11 +3399,25 @@ STATIC_IFN_KUNIT int amdgpu_dm_i2c_xfer(struct i2c_adapter *i2c_adap,
+ 			    &cmd))
+ 			result = num;
+ 	} else {
++		struct amdgpu_dm_connector *aconnector = ddc_service->link->priv;
++		struct mutex *aux_lock = NULL;
++
++		/*
++		 * On DP the I2C engine shares the DDC pins with AUX. Serialize
++		 * with AUX and sink detection, which both hold hw_mutex.
++		 */
++		if (aconnector && dc_is_dp_signal(ddc_service->link->connector_signal))
++			aux_lock = &aconnector->dm_dp_aux.aux.hw_mutex;
++
++		if (aux_lock)
++			mutex_lock(aux_lock);
+ 		if (dc_submit_i2c(
+ 			    ddc_service->ctx->dc,
+ 			    ddc_service->link->link_index,
+ 			    &cmd))
+ 			result = num;
++		if (aux_lock)
++			mutex_unlock(aux_lock);
+ 	}
+ 
+ 	kfree(cmd.payloads);
