@@ -9,6 +9,7 @@
     codex
     direnv
     git
+    opencode
     packages
     pmset
     rdp
