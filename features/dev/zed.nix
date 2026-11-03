@@ -35,6 +35,23 @@
         exec zeditor "$@"
       '';
 
+      # The Zed CLI opens the bundle it lives in. Use the copy made by
+      # targets.darwin.copyApps, otherwise it starts the store bundle, which hands
+      # off to the running instance and the open request is lost.
+      zedFromCopiedApp = pkgs.symlinkJoin {
+        name = "zed-editor-${pkgs.zed-editor.version}";
+        paths = [ pkgs.zed-editor ];
+        postBuild = ''
+          rm $out/bin/zeditor
+          cat > $out/bin/zeditor <<EOF
+          #!${pkgs.runtimeShell}
+          exec "${config.home.homeDirectory}/${config.targets.darwin.copyApps.directory}/Zed.app/Contents/MacOS/cli" "\$@"
+          EOF
+          chmod +x $out/bin/zeditor
+        '';
+        inherit (pkgs.zed-editor) meta;
+      };
+
       dataDir =
         if pkgs.stdenv.hostPlatform.isDarwin then
           "Library/Application Support/Zed"
@@ -63,6 +80,7 @@
 
       programs.zed-editor = {
         enable = true;
+        package = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin zedFromCopiedApp;
         defaultEditor = true;
         mutableUserKeymaps = false;
         mutableUserSettings = false;

@@ -1,26 +1,4 @@
-{
-  config,
-  pkgs,
-  ...
-}:
-let
-  # The Zed CLI opens the bundle it lives in. Use the copy made by
-  # targets.darwin.copyApps, otherwise it starts the store bundle, which hands
-  # off to the running instance and the open request is lost.
-  zed-editor = pkgs.symlinkJoin {
-    name = "zed-editor-${pkgs.zed-editor.version}";
-    paths = [ pkgs.zed-editor ];
-    postBuild = ''
-      rm $out/bin/zeditor
-      cat > $out/bin/zeditor <<EOF
-      #!${pkgs.runtimeShell}
-      exec "${config.home.homeDirectory}/${config.targets.darwin.copyApps.directory}/Zed.app/Contents/MacOS/cli" "\$@"
-      EOF
-      chmod +x $out/bin/zeditor
-    '';
-    inherit (pkgs.zed-editor) meta;
-  };
-in
+{ pkgs, ... }:
 {
   imports = [
     ./git.nix
@@ -46,8 +24,6 @@ in
   programs = {
     bash.enable = true;
     gpg.enable = true;
-
-    zed-editor.package = zed-editor;
   };
 
   services.gpg-agent = {
