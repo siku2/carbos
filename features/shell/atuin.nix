@@ -56,12 +56,6 @@ in
     end
   '';
 
-  programs.zsh.initContent = ''
-    if [[ -e ${keyPath} && $options[zle] = on ]]; then
-      eval "$(${lib.getExe config.programs.atuin.package} init zsh)"
-    fi
-  '';
-
   # Without the key a new machine starts its own history stream.
   systemd.user.services.atuin-key = {
     Unit = {
