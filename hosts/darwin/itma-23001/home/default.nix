@@ -10,6 +10,4 @@
     "full address" = "enif.pegasus.inomo.tech";
     username = "Administrator";
   };
-
-  programs.bash.enable = true;
 }
