@@ -24,13 +24,4 @@
       ];
     };
   };
-
-  home-manager.sharedModules = [
-    {
-      programs.nh = {
-        enable = true;
-        flake = "/etc/nix-darwin";
-      };
-    }
-  ];
 }
