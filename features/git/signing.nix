@@ -5,65 +5,41 @@
   ...
 }:
 let
-  cfg = config.carbos.git.signing;
+  cfg = config.carbos.user.signing;
 
   allowedSigners = pkgs.writeText "git-allowed-signers" ''
     ${config.carbos.user.email} namespaces="git" ${cfg.key}
   '';
 in
-{
-  options.carbos.git.signing = lib.mkOption {
-    type = lib.types.nullOr (
-      lib.types.submodule {
-        options = {
-          format = lib.mkOption {
-            type = lib.types.enum [
-              "ssh"
-              "openpgp"
-            ];
-          };
+lib.mkIf (cfg != null) (
+  lib.mkMerge [
+    {
+      programs.git.settings = {
+        commit.gpgsign = true;
+        tag.forceSignAnnotated = true;
+      };
+    }
 
-          key = lib.mkOption {
-            type = lib.types.str;
-            description = "Public SSH key, or the fingerprint of the OpenPGP key.";
-          };
-        };
-      }
-    );
-    default = null;
-    description = "Key that signs commits and tags.";
-  };
+    (lib.mkIf (cfg.format == "ssh") {
+      programs.git.settings = {
+        user.signingKey = "key::${cfg.key}";
+        gpg.format = "ssh";
+        gpg.ssh.allowedSignersFile = "${allowedSigners}";
+      };
+    })
 
-  config = lib.mkIf (cfg != null) (
-    lib.mkMerge [
-      {
-        programs.git.settings = {
-          commit.gpgsign = true;
-          tag.forceSignAnnotated = true;
-        };
-      }
+    (lib.mkIf (cfg.format == "openpgp") {
+      programs.git.settings.user.signingKey = cfg.key;
 
-      (lib.mkIf (cfg.format == "ssh") {
-        programs.git.settings = {
-          user.signingKey = "key::${cfg.key}";
-          gpg.format = "ssh";
-          gpg.ssh.allowedSignersFile = "${allowedSigners}";
-        };
-      })
+      programs.gpg.enable = true;
 
-      (lib.mkIf (cfg.format == "openpgp") {
-        programs.git.settings.user.signingKey = cfg.key;
-
-        programs.gpg.enable = true;
-
-        services.gpg-agent = {
-          enable = true;
-          pinentry.package =
-            if pkgs.stdenv.hostPlatform.isDarwin then pkgs.pinentry_mac else pkgs.pinentry-qt;
-          defaultCacheTtl = 600;
-          maxCacheTtl = 7200;
-        };
-      })
-    ]
-  );
-}
+      services.gpg-agent = {
+        enable = true;
+        pinentry.package =
+          if pkgs.stdenv.hostPlatform.isDarwin then pkgs.pinentry_mac else pkgs.pinentry-qt;
+        defaultCacheTtl = 600;
+        maxCacheTtl = 7200;
+      };
+    })
+  ]
+)
