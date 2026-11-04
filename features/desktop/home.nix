@@ -4,11 +4,6 @@
   ...
 }:
 {
-  imports = [
-    ./gtk.nix
-    ./keyring.nix
-  ];
-
   home = {
     # AccountsService falls back to this when no icon is set.
     file.".face".source = ./avatar.png;

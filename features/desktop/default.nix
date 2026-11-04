@@ -11,7 +11,9 @@
   flake.modules.homeManager.desktop.imports = [
     ./dms/home.nix
     ./dsearch.nix
+    ./gtk.nix
     ./home.nix
+    ./keyring.nix
     ./niri/home.nix
     ./wallpaper/home.nix
   ];
