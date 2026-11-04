@@ -3,7 +3,13 @@ let
   inherit (config.carbos.user) login;
 in
 {
-  users.users.${login}.home = "/Users/${login}";
+  # nix-darwin only applies users.users settings like the shell to known users.
+  users.knownUsers = [ login ];
+
+  users.users.${login} = {
+    uid = 501;
+    home = "/Users/${login}";
+  };
 
   system.primaryUser = login;
 }
