@@ -1,14 +1,14 @@
 {
   flake.modules.nixos.vault.imports = [
     ./bitwarden/nixos.nix
+    ./module.nix
     ./onepassword.nix
-    ./system.nix
   ];
 
   flake.modules.darwin.vault.imports = [
     ./bitwarden/darwin.nix
+    ./module.nix
     ./onepassword.nix
-    ./system.nix
   ];
 
   flake.modules.homeManager.vault.imports = [
