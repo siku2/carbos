@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ config, pkgs, ... }:
 {
   nixpkgs.hostPlatform = "x86_64-linux";
 
@@ -43,7 +43,12 @@
       "sd_mod"
     ];
 
-    kernelModules = [ "kvm-amd" ];
+    # The DIMMs stay powered in S3, so their LEDs would stay lit overnight.
+    extraModulePackages = [ (config.boot.kernelPackages.callPackage ./ene-dram { }) ];
+    kernelModules = [
+      "kvm-amd"
+      "ene_dram"
+    ];
   };
 
   hardware = {
