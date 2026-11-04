@@ -55,7 +55,7 @@ lib.mkIf (osConfig.carbos.vault.backend == "bitwarden") {
   # Held by rbw's SSH agent, never on disk.
   carbos.user.signing = {
     format = "ssh";
-    key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJc/x0F5XV2bnqHZFHZUlPmY/D24+mxhAWOR8D5LjyVi";
+    key = with osConfig.carbos.registry.sshKeys.carbon-x1; "${algorithm} ${key}";
   };
 
   # home.sessionVariables only reaches login shells. Apps launched from the
