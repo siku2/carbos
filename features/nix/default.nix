@@ -3,21 +3,16 @@
 
   flake.modules.nixos.nix.imports = [
     ./nixos.nix
-    ./settings.nix
-    ./unfree.nix
+    ./system.nix
   ];
 
   flake.modules.darwin.nix.imports = [
     ./darwin.nix
-    ./settings.nix
-    ./unfree.nix
+    ./system.nix
   ];
 
-  flake.modules.homeManager.nix =
-    { pkgs, ... }:
-    {
-      imports = [ ./direnv.nix ];
-
-      home.packages = [ pkgs.nixfmt ];
-    };
+  flake.modules.homeManager.nix.imports = [
+    ./direnv.nix
+    ./home.nix
+  ];
 }
