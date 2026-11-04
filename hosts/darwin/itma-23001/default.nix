@@ -91,5 +91,8 @@
   carbos.user.email = "simon.berger@inomotech.com";
   carbos.vault.backend = "1password";
 
-  home-manager.users.simon = ./home;
+  home-manager.users.simon = {
+    imports = [ ./home ];
+    home.stateVersion = "26.05";
+  };
 }

@@ -41,7 +41,10 @@
     scale = 1.25;
   };
 
-  home-manager.users.${config.carbos.user.login}.imports = [ ./home ];
+  home-manager.users.${config.carbos.user.login} = {
+    imports = [ ./home ];
+    home.stateVersion = "26.05";
+  };
 
   system.stateVersion = "26.05";
 }
