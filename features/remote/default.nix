@@ -7,7 +7,7 @@
     ];
   };
 
-  flake.modules.darwin.remote.home-manager.sharedModules = [ ./darwin-ssh.nix ];
+  flake.modules.darwin.remote.home-manager.sharedModules = [ ./home-darwin.nix ];
 
   flake.modules.homeManager.remote.imports = [
     ./rdp.nix
