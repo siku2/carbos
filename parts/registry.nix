@@ -18,6 +18,11 @@ let
           type = types.nullOr types.str;
           default = null;
         };
+        vaultEntry = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = "Vaultwarden entry that holds the private key.";
+        };
         line = mkOption {
           type = types.str;
           readOnly = true;
@@ -124,7 +129,7 @@ in
     sshKeys = mkOption {
       type = types.attrsOf sshKey;
       default = { };
-      description = "Keys used to connect. User keys are named after their entries in Vaultwarden.";
+      description = "Keys used to connect.";
     };
   };
 

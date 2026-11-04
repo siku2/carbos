@@ -24,6 +24,7 @@
         algorithm = "ssh-ed25519";
         key = "AAAAC3NzaC1lZDI1NTE5AAAAIJc/x0F5XV2bnqHZFHZUlPmY/D24+mxhAWOR8D5LjyVi";
         comment = "carbon-x1";
+        vaultEntry = "carbon-x1";
       };
       carbon-x1-builder = {
         algorithm = "ssh-ed25519";
