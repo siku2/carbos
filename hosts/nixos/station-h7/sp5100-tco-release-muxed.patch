@@ -1,0 +1,15 @@
+diff --git a/drivers/watchdog/sp5100_tco.c b/drivers/watchdog/sp5100_tco.c
+index 72ad596..839dd2a 100644
+--- a/drivers/watchdog/sp5100_tco.c
++++ b/drivers/watchdog/sp5100_tco.c
+@@ -415,8 +415,8 @@ out:
+ 	if (addr)
+ 		iounmap(addr);
+ 
+-	release_resource(res);
+-	kfree(res);
++	release_mem_region(EFCH_PM_ACPI_MMIO_PM_ADDR,
++			   EFCH_PM_ACPI_MMIO_PM_SIZE);
+ 
+ 	return ret;
+ }

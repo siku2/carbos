@@ -32,6 +32,12 @@
         name = "drm-amd-dm-i2c-aux-lock";
         patch = ./drm-amd-dm-i2c-aux-lock.patch;
       }
+      # release_resource() skips the muxed region wakeup, so an SMBus
+      # transfer that races the watchdog probe at boot sleeps forever.
+      {
+        name = "sp5100-tco-release-muxed";
+        patch = ./sp5100-tco-release-muxed.patch;
+      }
     ];
 
     initrd.availableKernelModules = [
