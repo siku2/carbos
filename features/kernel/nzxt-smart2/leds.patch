@@ -1,0 +1,584 @@
+--- a/drivers/hwmon/nzxt-smart2.c	2026-11-05 16:23:30.095123622 +0100
++++ b/drivers/hwmon/nzxt-smart2.c	2026-11-05 16:24:53.532509053 +0100
+@@ -5,8 +5,11 @@
+  * Copyright (c) 2021 Aleksandr Mezin
+  */
+ 
++#include <linux/completion.h>
+ #include <linux/hid.h>
+ #include <linux/hwmon.h>
++#include <linux/led-class-multicolor.h>
++#include <linux/leds.h>
+ #include <linux/math.h>
+ #include <linux/module.h>
+ #include <linux/mutex.h>
+@@ -25,6 +28,16 @@
+ 
+ #define UPDATE_INTERVAL_DEFAULT_MS 1000
+ 
++/* All lighting reports have space for up to 8 LED channels. */
++#define LED_CHANNELS_MAX 8
++#define LED_ACCESSORIES_MAX 6
++#define LED_SPEED_COUNT 5
++#define LED_SPEED_DEFAULT 2
++#define LIGHTING_INFO_TIMEOUT_MS 1000
++
++/* hid_device_id.driver_data flags */
++#define NZXT_SMART2_LEDS BIT(0)
++
+ /* These strings match labels on the device exactly */
+ static const char *const fan_label[] = {
+ 	"FAN 1",
+@@ -45,6 +58,7 @@
+ };
+ 
+ enum {
++	INPUT_REPORT_ID_LIGHTING_INFO = 0x21,
+ 	INPUT_REPORT_ID_FAN_CONFIG = 0x61,
+ 	INPUT_REPORT_ID_FAN_STATUS = 0x67,
+ };
+@@ -137,14 +151,73 @@
+ 	} __packed;
+ } __packed;
+ 
++/*
++ * The device sends this input report in response to "lighting info" command:
++ * a 2-byte output report { 0x20, 0x03 }.
++ */
++struct lighting_info_report {
++	/* report_id should be INPUT_REPORT_ID_LIGHTING_INFO = 0x21 */
++	u8 report_id;
++	/* Always 0x03 */
++	u8 magic;
++	u8 unknown[12];
++	u8 channel_count;
++	/* Accessory type per slot, 0 for an empty slot. */
++	u8 accessories[LED_CHANNELS_MAX][LED_ACCESSORIES_MAX];
++} __packed;
++
+ #define OUTPUT_REPORT_SIZE 64
+ 
+ enum {
++	OUTPUT_REPORT_ID_LIGHTING_INFO = 0x20,
++	OUTPUT_REPORT_ID_SET_LEDS = 0x2a,
+ 	OUTPUT_REPORT_ID_INIT_COMMAND = 0x60,
+ 	OUTPUT_REPORT_ID_SET_FAN_SPEED = 0x62,
+ };
+ 
+ enum {
++	LED_MODE_FIXED = 0x00,
++	LED_MODE_SPECTRUM_WAVE = 0x02,
++	LED_MODE_COVERING_MARQUEE = 0x04,
++	LED_MODE_PULSE = 0x06,
++	LED_MODE_BREATHING = 0x07,
++	LED_MODE_CANDLE = 0x08,
++	LED_MODE_STARRY_NIGHT = 0x09,
++	LED_MODE_RAINBOW_FLOW = 0x0b,
++	LED_MODE_SUPER_RAINBOW = 0x0c,
++	LED_MODE_RAINBOW_PULSE = 0x0d,
++};
++
++#define LED_SPEED_FIXED 0x32
++#define LED_DIRECTION_BACKWARD 0x02
++#define LED_FLAGS_FADE 0x08
++
++/*
++ * This output report sets the lighting mode for one or more LED channels.
++ * Older firmware used report 0x28 for this, which this firmware does not
++ * declare.
++ */
++struct set_leds_report {
++	/* report_id should be OUTPUT_REPORT_ID_SET_LEDS = 0x2a */
++	u8 report_id;
++	/* Should be 0x04 */
++	u8 magic;
++	u8 channel_bit_mask;
++	u8 channel_bit_mask_dup;
++	u8 mode;
++	/* Mode specific period, smaller is faster. */
++	__le16 speed;
++	/* Colors as G, R, B. */
++	u8 colors[16][3];
++	u8 direction;
++	u8 color_count;
++	u8 flags;
++	/* Should be { 0x08, 0x03 } */
++	u8 unknown[2];
++	u8 padding[4];
++} __packed;
++
++enum {
+ 	INIT_COMMAND_SET_UPDATE_INTERVAL = 0x02,
+ 	INIT_COMMAND_DETECT_FANS = 0x03,
+ };
+@@ -204,6 +277,33 @@
+ 	struct mutex mutex;
+ 	long update_interval;
+ 	u8 output_buffer[OUTPUT_REPORT_SIZE] __aligned(ARCH_DMA_MINALIGN);
++
++	struct completion lighting_info_received;
++	u8 led_channel_count;
++	u8 led_accessory[LED_CHANNELS_MAX];
++	/* LED state is protected by mutex. */
++	struct nzxt_smart2_led *leds;
++};
++
++struct nzxt_smart2_effect {
++	struct led_trigger trigger;
++	u8 mode;
++	u8 flags;
++	bool color;
++	bool direction;
++	/* Slowest to fastest, all zero if the effect has no speed. */
++	u16 speed[LED_SPEED_COUNT];
++};
++
++struct nzxt_smart2_led {
++	struct drvdata *drvdata;
++	struct led_classdev_mc mc;
++	struct mc_subled subleds[3];
++	const struct nzxt_smart2_effect *effect;
++	u8 channel;
++	u8 speed;
++	bool reverse;
++	bool registered;
+ };
+ 
+ static long scale_pwm_value(long val, long orig_max, long new_max)
+@@ -685,6 +785,338 @@
+ 	.info = nzxt_smart2_channel_info,
+ };
+ 
++static void handle_lighting_info_report(struct drvdata *drvdata, void *data,
++					int size)
++{
++	struct lighting_info_report *report = data;
++	int i;
++
++	if (size < sizeof(struct lighting_info_report))
++		return;
++
++	if (report->magic != 0x03 || completion_done(&drvdata->lighting_info_received))
++		return;
++
++	drvdata->led_channel_count = min_t(u8, report->channel_count,
++					   LED_CHANNELS_MAX);
++	for (i = 0; i < drvdata->led_channel_count; i++)
++		drvdata->led_accessory[i] = report->accessories[i][0];
++
++	complete(&drvdata->lighting_info_received);
++}
++
++static struct nzxt_smart2_led *to_nzxt_smart2_led(struct led_classdev *cdev)
++{
++	return container_of(lcdev_to_mccdev(cdev), struct nzxt_smart2_led, mc);
++}
++
++static int nzxt_smart2_led_apply(struct nzxt_smart2_led *led)
++{
++	const struct nzxt_smart2_effect *effect = led->effect;
++	unsigned int brightness = led->mc.led_cdev.brightness;
++	struct set_leds_report report = {
++		.report_id = OUTPUT_REPORT_ID_SET_LEDS,
++		.magic = 0x04,
++		.channel_bit_mask = 1 << led->channel,
++		.channel_bit_mask_dup = 1 << led->channel,
++		.mode = LED_MODE_FIXED,
++		.color_count = 1,
++		.unknown = { 0x08, 0x03 },
++	};
++
++	lockdep_assert_held(&led->drvdata->mutex);
++
++	if (brightness) {
++		report.speed = cpu_to_le16(LED_SPEED_FIXED);
++		if (effect) {
++			report.mode = effect->mode;
++			report.flags = effect->flags;
++			if (effect->speed[0])
++				report.speed = cpu_to_le16(effect->speed[led->speed]);
++			if (effect->direction && led->reverse)
++				report.direction = LED_DIRECTION_BACKWARD;
++		}
++		if (!effect || effect->color) {
++			led_mc_calc_color_components(&led->mc, brightness);
++			report.colors[0][0] = led->subleds[1].brightness;
++			report.colors[0][1] = led->subleds[0].brightness;
++			report.colors[0][2] = led->subleds[2].brightness;
++		}
++	}
++
++	return send_output_report(led->drvdata, &report, sizeof(report));
++}
++
++static int nzxt_smart2_led_brightness_set(struct led_classdev *cdev,
++					  enum led_brightness brightness)
++{
++	struct nzxt_smart2_led *led = to_nzxt_smart2_led(cdev);
++
++	guard(mutex)(&led->drvdata->mutex);
++	return nzxt_smart2_led_apply(led);
++}
++
++static int nzxt_smart2_trigger_activate(struct led_classdev *cdev)
++{
++	struct nzxt_smart2_led *led = to_nzxt_smart2_led(cdev);
++
++	guard(mutex)(&led->drvdata->mutex);
++	led->effect = container_of(cdev->trigger, struct nzxt_smart2_effect,
++				   trigger);
++	if (!cdev->brightness)
++		cdev->brightness = cdev->max_brightness;
++	return nzxt_smart2_led_apply(led);
++}
++
++/* The LED core turns the LED off after this, which writes the hardware. */
++static void nzxt_smart2_trigger_deactivate(struct led_classdev *cdev)
++{
++	struct nzxt_smart2_led *led = to_nzxt_smart2_led(cdev);
++
++	guard(mutex)(&led->drvdata->mutex);
++	led->effect = NULL;
++}
++
++static ssize_t speed_show(struct device *dev, struct device_attribute *attr,
++			  char *buf)
++{
++	struct nzxt_smart2_led *led = to_nzxt_smart2_led(led_trigger_get_led(dev));
++
++	return sysfs_emit(buf, "%u\n", led->speed);
++}
++
++static ssize_t speed_store(struct device *dev, struct device_attribute *attr,
++			   const char *buf, size_t count)
++{
++	struct nzxt_smart2_led *led = to_nzxt_smart2_led(led_trigger_get_led(dev));
++	u8 speed;
++	int ret;
++
++	ret = kstrtou8(buf, 10, &speed);
++	if (ret)
++		return ret;
++	if (speed >= LED_SPEED_COUNT)
++		return -EINVAL;
++
++	guard(mutex)(&led->drvdata->mutex);
++	led->speed = speed;
++	ret = nzxt_smart2_led_apply(led);
++	return ret ?: count;
++}
++static DEVICE_ATTR_RW(speed);
++
++static ssize_t direction_show(struct device *dev,
++			      struct device_attribute *attr, char *buf)
++{
++	struct nzxt_smart2_led *led = to_nzxt_smart2_led(led_trigger_get_led(dev));
++
++	return sysfs_emit(buf, "%s\n", led->reverse ? "reverse" : "forward");
++}
++
++static ssize_t direction_store(struct device *dev,
++			       struct device_attribute *attr, const char *buf,
++			       size_t count)
++{
++	struct nzxt_smart2_led *led = to_nzxt_smart2_led(led_trigger_get_led(dev));
++	bool reverse;
++	int ret;
++
++	if (sysfs_streq(buf, "forward"))
++		reverse = false;
++	else if (sysfs_streq(buf, "reverse"))
++		reverse = true;
++	else
++		return -EINVAL;
++
++	guard(mutex)(&led->drvdata->mutex);
++	led->reverse = reverse;
++	ret = nzxt_smart2_led_apply(led);
++	return ret ?: count;
++}
++static DEVICE_ATTR_RW(direction);
++
++static struct attribute *nzxt_smart2_speed_attrs[] = {
++	&dev_attr_speed.attr,
++	NULL
++};
++ATTRIBUTE_GROUPS(nzxt_smart2_speed);
++
++static struct attribute *nzxt_smart2_direction_attrs[] = {
++	&dev_attr_speed.attr,
++	&dev_attr_direction.attr,
++	NULL
++};
++ATTRIBUTE_GROUPS(nzxt_smart2_direction);
++
++static struct led_hw_trigger_type nzxt_smart2_trigger_type;
++
++#define NZXT_SMART2_EFFECT(_name, _mode, ...) {				\
++	.trigger = {							\
++		.name = _name,						\
++		.activate = nzxt_smart2_trigger_activate,		\
++		.deactivate = nzxt_smart2_trigger_deactivate,		\
++		.trigger_type = &nzxt_smart2_trigger_type,		\
++	},								\
++	.mode = _mode,							\
++	__VA_ARGS__							\
++}
++
++#define SPEED_RAINBOW { 0x15e, 0x12c, 0xfa, 0x96, 0x50 }
++#define SPEED_PULSE { 0x19, 0x14, 0x0f, 0x07, 0x04 }
++
++static struct nzxt_smart2_effect nzxt_smart2_effects[] = {
++	NZXT_SMART2_EFFECT("breathing", LED_MODE_BREATHING, .color = true,
++			   .flags = LED_FLAGS_FADE,
++			   .speed = { 0x28, 0x1e, 0x14, 0x0a, 0x04 }),
++	NZXT_SMART2_EFFECT("pulse", LED_MODE_PULSE, .color = true,
++			   .flags = LED_FLAGS_FADE, .speed = SPEED_PULSE),
++	NZXT_SMART2_EFFECT("starry-night", LED_MODE_STARRY_NIGHT, .color = true,
++			   .speed = SPEED_PULSE),
++	NZXT_SMART2_EFFECT("candle", LED_MODE_CANDLE, .color = true),
++	NZXT_SMART2_EFFECT("covering-marquee", LED_MODE_COVERING_MARQUEE,
++			   .color = true, .direction = true,
++			   .speed = SPEED_RAINBOW),
++	NZXT_SMART2_EFFECT("spectrum-wave", LED_MODE_SPECTRUM_WAVE,
++			   .direction = true, .speed = SPEED_RAINBOW),
++	NZXT_SMART2_EFFECT("rainbow", LED_MODE_RAINBOW_FLOW,
++			   .direction = true, .speed = SPEED_RAINBOW),
++	NZXT_SMART2_EFFECT("super-rainbow", LED_MODE_SUPER_RAINBOW,
++			   .direction = true, .speed = SPEED_RAINBOW),
++	NZXT_SMART2_EFFECT("rainbow-pulse", LED_MODE_RAINBOW_PULSE,
++			   .direction = true, .speed = SPEED_RAINBOW),
++};
++
++static int nzxt_smart2_register_triggers(void)
++{
++	struct nzxt_smart2_effect *effect;
++	int i, ret;
++
++	for (i = 0; i < ARRAY_SIZE(nzxt_smart2_effects); i++) {
++		effect = &nzxt_smart2_effects[i];
++		if (effect->direction)
++			effect->trigger.groups = nzxt_smart2_direction_groups;
++		else if (effect->speed[0])
++			effect->trigger.groups = nzxt_smart2_speed_groups;
++
++		ret = led_trigger_register(&effect->trigger);
++		if (ret)
++			goto err;
++	}
++	return 0;
++
++err:
++	while (i--)
++		led_trigger_unregister(&nzxt_smart2_effects[i].trigger);
++	return ret;
++}
++
++static void nzxt_smart2_unregister_triggers(void)
++{
++	int i;
++
++	for (i = 0; i < ARRAY_SIZE(nzxt_smart2_effects); i++)
++		led_trigger_unregister(&nzxt_smart2_effects[i].trigger);
++}
++
++static void nzxt_smart2_leds_unregister(struct drvdata *drvdata)
++{
++	int i;
++
++	if (!drvdata->leds)
++		return;
++
++	for (i = 0; i < drvdata->led_channel_count; i++)
++		if (drvdata->leds[i].registered)
++			led_classdev_multicolor_unregister(&drvdata->leds[i].mc);
++}
++
++static void nzxt_smart2_leds_reapply(struct drvdata *drvdata)
++{
++	int i;
++
++	if (!drvdata->leds)
++		return;
++
++	guard(mutex)(&drvdata->mutex);
++	for (i = 0; i < drvdata->led_channel_count; i++)
++		if (drvdata->leds[i].registered)
++			nzxt_smart2_led_apply(&drvdata->leds[i]);
++}
++
++/*
++ * The hardware state is left alone until userspace sets it, so the LEDs keep
++ * what they showed before the driver loaded.
++ */
++static int nzxt_smart2_leds_init(struct drvdata *drvdata)
++{
++	static const u8 lighting_info_report[] = {
++		OUTPUT_REPORT_ID_LIGHTING_INFO,
++		0x03,
++	};
++	struct device *dev = &drvdata->hid->dev;
++	struct nzxt_smart2_led *led;
++	struct led_classdev *cdev;
++	int i, j, ret;
++
++	scoped_guard(mutex, &drvdata->mutex)
++		ret = send_output_report(drvdata, lighting_info_report,
++					 sizeof(lighting_info_report));
++	if (ret)
++		return ret;
++
++	if (!wait_for_completion_timeout(&drvdata->lighting_info_received,
++					 msecs_to_jiffies(LIGHTING_INFO_TIMEOUT_MS)))
++		return -ETIMEDOUT;
++
++	drvdata->leds = devm_kcalloc(dev, drvdata->led_channel_count,
++				     sizeof(*drvdata->leds), GFP_KERNEL);
++	if (!drvdata->leds)
++		return -ENOMEM;
++
++	for (i = 0; i < drvdata->led_channel_count; i++) {
++		if (!drvdata->led_accessory[i])
++			continue;
++
++		led = &drvdata->leds[i];
++		led->drvdata = drvdata;
++		led->channel = i;
++		led->speed = LED_SPEED_DEFAULT;
++
++		led->subleds[0].color_index = LED_COLOR_ID_RED;
++		led->subleds[1].color_index = LED_COLOR_ID_GREEN;
++		led->subleds[2].color_index = LED_COLOR_ID_BLUE;
++		for (j = 0; j < 3; j++) {
++			led->subleds[j].channel = j;
++			led->subleds[j].intensity = LED_FULL;
++		}
++		led->mc.subled_info = led->subleds;
++		led->mc.num_colors = 3;
++
++		cdev = &led->mc.led_cdev;
++		cdev->name = devm_kasprintf(dev, GFP_KERNEL, "%s:rgb:led-%d",
++					    dev_name(dev), i + 1);
++		if (!cdev->name) {
++			ret = -ENOMEM;
++			goto err;
++		}
++		cdev->max_brightness = LED_FULL;
++		cdev->brightness_set_blocking = nzxt_smart2_led_brightness_set;
++		cdev->trigger_type = &nzxt_smart2_trigger_type;
++		cdev->flags = LED_RETAIN_AT_SHUTDOWN;
++
++		ret = led_classdev_multicolor_register(dev, &led->mc);
++		if (ret)
++			goto err;
++		led->registered = true;
++	}
++	return 0;
++
++err:
++	nzxt_smart2_leds_unregister(drvdata);
++	drvdata->leds = NULL;
++	return ret;
++}
++
+ static int nzxt_smart2_hid_raw_event(struct hid_device *hdev,
+ 				     struct hid_report *report, u8 *data, int size)
+ {
+@@ -692,6 +1124,10 @@
+ 	u8 report_id = *data;
+ 
+ 	switch (report_id) {
++	case INPUT_REPORT_ID_LIGHTING_INFO:
++		handle_lighting_info_report(drvdata, data, size);
++		break;
++
+ 	case INPUT_REPORT_ID_FAN_CONFIG:
+ 		handle_fan_config_report(drvdata, data, size);
+ 		break;
+@@ -707,6 +1143,7 @@
+ static int __maybe_unused nzxt_smart2_hid_reset_resume(struct hid_device *hdev)
+ {
+ 	struct drvdata *drvdata = hid_get_drvdata(hdev);
++	int ret;
+ 
+ 	/*
+ 	 * Userspace is still frozen (so no concurrent sysfs attribute access
+@@ -718,7 +1155,12 @@
+ 	drvdata->voltage_status_received = false;
+ 	spin_unlock_bh(&drvdata->wq.lock);
+ 
+-	return init_device(drvdata, drvdata->update_interval);
++	ret = init_device(drvdata, drvdata->update_interval);
++	if (ret)
++		return ret;
++
++	nzxt_smart2_leds_reapply(drvdata);
++	return 0;
+ }
+ 
+ static int nzxt_smart2_hid_probe(struct hid_device *hdev,
+@@ -735,6 +1177,7 @@
+ 	hid_set_drvdata(hdev, drvdata);
+ 
+ 	init_waitqueue_head(&drvdata->wq);
++	init_completion(&drvdata->lighting_info_received);
+ 
+ 	ret = devm_mutex_init(&hdev->dev, &drvdata->mutex);
+ 	if (ret)
+@@ -768,6 +1211,12 @@
+ 		goto out_hw_close;
+ 	}
+ 
++	if (id->driver_data & NZXT_SMART2_LEDS) {
++		ret = nzxt_smart2_leds_init(drvdata);
++		if (ret)
++			hid_warn(hdev, "LED setup failed: %d\n", ret);
++	}
++
+ 	return 0;
+ 
+ out_hw_close:
+@@ -782,6 +1231,7 @@
+ {
+ 	struct drvdata *drvdata = hid_get_drvdata(hdev);
+ 
++	nzxt_smart2_leds_unregister(drvdata);
+ 	hwmon_device_unregister(drvdata->hwmon);
+ 
+ 	hid_hw_close(hdev);
+@@ -795,7 +1245,8 @@
+ 	{ HID_USB_DEVICE(0x1e71, 0x2009) }, /* NZXT RGB & Fan Controller */
+ 	{ HID_USB_DEVICE(0x1e71, 0x200e) }, /* NZXT RGB & Fan Controller */
+ 	{ HID_USB_DEVICE(0x1e71, 0x2010) }, /* NZXT RGB & Fan Controller */
+-	{ HID_USB_DEVICE(0x1e71, 0x2011) }, /* NZXT RGB & Fan Controller (6 RGB) */
++	{ HID_USB_DEVICE(0x1e71, 0x2011), /* NZXT RGB & Fan Controller (6 RGB) */
++	  .driver_data = NZXT_SMART2_LEDS },
+ 	{ HID_USB_DEVICE(0x1e71, 0x2019) }, /* NZXT RGB & Fan Controller (6 RGB) */
+ 	{ HID_USB_DEVICE(0x1e71, 0x2020) }, /* NZXT RGB & Fan Controller (6 RGB) */
+ 	{},
+@@ -814,12 +1265,24 @@
+ 
+ static int __init nzxt_smart2_init(void)
+ {
+-	return hid_register_driver(&nzxt_smart2_hid_driver);
++	int ret;
++
++	BUILD_BUG_ON(sizeof(struct set_leds_report) != OUTPUT_REPORT_SIZE);
++
++	ret = nzxt_smart2_register_triggers();
++	if (ret)
++		return ret;
++
++	ret = hid_register_driver(&nzxt_smart2_hid_driver);
++	if (ret)
++		nzxt_smart2_unregister_triggers();
++	return ret;
+ }
+ 
+ static void __exit nzxt_smart2_exit(void)
+ {
+ 	hid_unregister_driver(&nzxt_smart2_hid_driver);
++	nzxt_smart2_unregister_triggers();
+ }
+ 
+ MODULE_DEVICE_TABLE(hid, nzxt_smart2_hid_id_table);
