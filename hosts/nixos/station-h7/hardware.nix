@@ -1,4 +1,4 @@
-{ config, pkgs, ... }:
+{ ... }:
 {
   nixpkgs.hostPlatform = "x86_64-linux";
 
@@ -11,35 +11,6 @@
       efi.canTouchEfiVariables = true;
     };
 
-    # The 7800X3D is Zen 4, so the znver4 LTO build is the closest match.
-    # It also carries CONFIG_AMD_PRIVATE_COLOR, which chaotic.hdr asserts on.
-    kernelPackages = pkgs.linuxPackages_cachyos-lto-znver4;
-
-    # Monitor wake on the G95NC. DDC/CI from userspace races AUX and aborts
-    # link training. amdgpu 7.3 then allocates an MST payload on the dead
-    # link, and the leaked start slot keeps the stream outside the payload
-    # table until reboot. drm/amd#6047, drm/amd#6049.
-    kernelPatches = [
-      {
-        name = "drm-dp-mst-start-slot";
-        patch = ./drm-dp-mst-start-slot.patch;
-      }
-      {
-        name = "drm-amd-dpms-abort-failed-mst";
-        patch = ./drm-amd-dpms-abort-failed-mst.patch;
-      }
-      {
-        name = "drm-amd-dm-i2c-aux-lock";
-        patch = ./drm-amd-dm-i2c-aux-lock.patch;
-      }
-      # release_resource() skips the muxed region wakeup, so an SMBus
-      # transfer that races the watchdog probe at boot sleeps forever.
-      {
-        name = "sp5100-tco-release-muxed";
-        patch = ./sp5100-tco-release-muxed.patch;
-      }
-    ];
-
     initrd.availableKernelModules = [
       "nvme"
       "xhci_pci"
@@ -49,12 +20,23 @@
       "sd_mod"
     ];
 
+    kernelModules = [ "kvm-amd" ];
+  };
+
+  carbos.kernel = {
+    # The 7800X3D is Zen 4, so the znver4 LTO build is the closest match.
+    # It also carries CONFIG_AMD_PRIVATE_COLOR, which chaotic.hdr asserts on.
+    cachyos = {
+      enable = true;
+      march = "znver4";
+    };
+
+    # Monitor wake on the G95NC.
+    fixes.amdgpuMstWake.enable = true;
+    fixes.sp5100Tco.enable = true;
+
     # The DIMMs stay powered in S3, so their LEDs would stay lit overnight.
-    extraModulePackages = [ (config.boot.kernelPackages.callPackage ./ene-dram { }) ];
-    kernelModules = [
-      "kvm-amd"
-      "ene_dram"
-    ];
+    drivers.eneDram.enable = true;
   };
 
   hardware = {

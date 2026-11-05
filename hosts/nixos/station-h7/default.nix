@@ -21,6 +21,7 @@
     firefox
     firmware
     git
+    kernel
     kicad
     mic
     nix
