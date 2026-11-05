@@ -40,7 +40,7 @@ in
     settings = {
       update_check = false;
       enter_accept = true;
-      filter_mode_shell_up_key_binding = "session";
+      filter_mode_shell_up_key_binding = "workspace";
       inline_height = 30;
       inline_height_shell_up_key_binding = 10;
       show_tabs = false;
