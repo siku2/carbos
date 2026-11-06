@@ -1,0 +1,1 @@
+obj-m := corsair-ccore.o

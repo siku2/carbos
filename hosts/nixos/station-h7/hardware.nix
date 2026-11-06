@@ -38,6 +38,7 @@
     # The DIMMs stay powered in S3, so their LEDs would stay lit overnight.
     drivers.eneDram.enable = true;
     drivers.nzxtSmart2.enable = true;
+    drivers.corsairCcore.enable = true;
   };
 
   hardware = {
