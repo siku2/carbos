@@ -78,6 +78,7 @@ struct ene_led {
 	u8 led_count;
 	u8 speed;
 	bool reverse;
+	bool suspended;
 };
 
 static struct ene_led *to_ene_led(struct led_classdev *cdev)
@@ -156,14 +157,17 @@ static int ene_write_colors(struct ene_led *led)
 	return 0;
 }
 
-static int ene_apply(struct ene_led *led)
+static int ene_apply(struct ene_led *led, unsigned int brightness)
 {
 	struct i2c_client *client = led->client;
-	unsigned int brightness = led->mc.led_cdev.brightness;
 	u8 mode = ENE_MODE_STATIC;
 	int ret;
 
 	lockdep_assert_held(&led->lock);
+
+	/* Generic triggers keep running while the device is suspended. */
+	if (led->suspended)
+		return 0;
 
 	if (!brightness)
 		return ene_off(client);
@@ -200,18 +204,23 @@ static int ene_brightness_set(struct led_classdev *cdev,
 	struct ene_led *led = to_ene_led(cdev);
 
 	guard(mutex)(&led->lock);
-	return ene_apply(led);
+	return ene_apply(led, brightness);
 }
 
 static int ene_trigger_activate(struct led_classdev *cdev)
 {
 	struct ene_led *led = to_ene_led(cdev);
+	int ret;
 
 	guard(mutex)(&led->lock);
 	led->effect = container_of(cdev->trigger, struct ene_effect, trigger);
 	if (!cdev->brightness)
 		cdev->brightness = cdev->max_brightness;
-	return ene_apply(led);
+	ret = ene_apply(led, cdev->brightness);
+	/* The LED core does not call deactivate after a failed activate. */
+	if (ret)
+		led->effect = NULL;
+	return ret;
 }
 
 /* The LED core turns the LED off after this, which writes the hardware. */
@@ -246,7 +255,7 @@ static ssize_t speed_store(struct device *dev, struct device_attribute *attr,
 
 	guard(mutex)(&led->lock);
 	led->speed = speed;
-	ret = ene_apply(led);
+	ret = ene_apply(led, led->mc.led_cdev.brightness);
 	return ret ?: count;
 }
 static DEVICE_ATTR_RW(speed);
@@ -276,7 +285,7 @@ static ssize_t direction_store(struct device *dev,
 
 	guard(mutex)(&led->lock);
 	led->reverse = reverse;
-	ret = ene_apply(led);
+	ret = ene_apply(led, led->mc.led_cdev.brightness);
 	return ret ?: count;
 }
 static DEVICE_ATTR_RW(direction);
@@ -399,7 +408,7 @@ static int ene_probe(struct i2c_client *client)
 	i2c_set_clientdata(client, led);
 
 	scoped_guard(mutex, &led->lock)
-		ene_apply(led);
+		ene_apply(led, LED_OFF);
 
 	return devm_led_classdev_multicolor_register(dev, &led->mc);
 }
@@ -409,11 +418,10 @@ static int ene_suspend(struct device *dev)
 {
 	struct ene_led *led = i2c_get_clientdata(to_i2c_client(dev));
 
-	if (!led->variant->off_in_suspend)
-		return 0;
-
 	guard(mutex)(&led->lock);
-	ene_off(led->client);
+	if (led->variant->off_in_suspend)
+		ene_off(led->client);
+	led->suspended = true;
 	return 0;
 }
 
@@ -422,7 +430,8 @@ static int ene_resume(struct device *dev)
 	struct ene_led *led = i2c_get_clientdata(to_i2c_client(dev));
 
 	guard(mutex)(&led->lock);
-	ene_apply(led);
+	led->suspended = false;
+	ene_apply(led, led->mc.led_cdev.brightness);
 	return 0;
 }
 
@@ -478,22 +487,20 @@ static bool ene_gpu_match(struct i2c_adapter *adap)
 	       !strcmp(adap->name, "AMDGPU DM i2c OEM bus");
 }
 
-#define ENE_BUS_MAX_ADDRS 8
-
 struct ene_bus {
 	bool (*match)(struct i2c_adapter *adap);
 	const char *type;
 	unsigned short first_addr;
 	unsigned short addr_count;
-	struct i2c_client *clients[ENE_BUS_MAX_ADDRS];
 };
 
-static struct ene_bus ene_buses[] = {
+static const struct ene_bus ene_buses[] = {
 	{ ene_dram_match, "ene_dram", 0x70, 8 },
 	{ ene_gpu_match, "ene_gpu", 0x67, 1 },
 };
 
-static DEFINE_MUTEX(ene_clients_lock);
+static DEFINE_MUTEX(ene_exiting_lock);
+static bool ene_exiting;
 
 static bool ene_adapter_match(struct i2c_adapter *adap)
 {
@@ -538,9 +545,14 @@ static int ene_find_adapter(struct device *dev, void *data)
 	return 1;
 }
 
-static void ene_scan_bus(struct ene_bus *bus)
+/*
+ * The clients stay with the adapter, which removes them. A module reload
+ * binds to them again through the id table.
+ */
+static void ene_scan_bus(const struct ene_bus *bus)
 {
 	struct ene_find find = { .bus = bus };
+	struct i2c_adapter *check;
 	int i;
 
 	/* Not i2c_for_each_dev(), it deadlocks with i2c_get_adapter(). */
@@ -551,17 +563,15 @@ static void ene_scan_bus(struct ene_bus *bus)
 	for (i = 0; i < bus->addr_count; i++) {
 		unsigned short addrs[] = { bus->first_addr + i, I2C_CLIENT_END };
 		struct i2c_board_info info = { };
-		struct i2c_client *client;
+
+		/* Stop once the adapter is being deleted. */
+		check = i2c_get_adapter(find.adap->nr);
+		if (!check)
+			break;
+		i2c_put_adapter(check);
 
 		strscpy(info.type, bus->type);
-		client = i2c_new_scanned_device(find.adap, &info, addrs,
-						ene_detect);
-		if (IS_ERR(client))
-			continue;
-
-		mutex_lock(&ene_clients_lock);
-		bus->clients[i] = client;
-		mutex_unlock(&ene_clients_lock);
+		i2c_new_scanned_device(find.adap, &info, addrs, ene_detect);
 	}
 
 	i2c_put_adapter(find.adap);
@@ -580,30 +590,14 @@ static DECLARE_WORK(ene_scan_work, ene_scan);
 static int ene_bus_notify(struct notifier_block *nb, unsigned long action,
 			  void *data)
 {
-	struct device *dev = data;
-	struct i2c_adapter *adap;
-	struct i2c_client *client;
-	int i, j;
+	struct i2c_adapter *adap = i2c_verify_adapter(data);
 
-	switch (action) {
-	case BUS_NOTIFY_ADD_DEVICE:
-		adap = i2c_verify_adapter(dev);
-		if (adap && ene_adapter_match(adap))
-			queue_work(system_long_wq, &ene_scan_work);
-		break;
-	case BUS_NOTIFY_REMOVED_DEVICE:
-		client = i2c_verify_client(dev);
-		if (!client)
-			break;
-		mutex_lock(&ene_clients_lock);
-		for (i = 0; i < ARRAY_SIZE(ene_buses); i++)
-			for (j = 0; j < ENE_BUS_MAX_ADDRS; j++)
-				if (ene_buses[i].clients[j] == client)
-					ene_buses[i].clients[j] = NULL;
-		mutex_unlock(&ene_clients_lock);
-		break;
-	}
+	if (action != BUS_NOTIFY_ADD_DEVICE || !adap || !ene_adapter_match(adap))
+		return NOTIFY_DONE;
 
+	guard(mutex)(&ene_exiting_lock);
+	if (!ene_exiting)
+		queue_work(system_freezable_wq, &ene_scan_work);
 	return NOTIFY_DONE;
 }
 
@@ -633,7 +627,7 @@ static int __init ene_init(void)
 	if (ret)
 		goto err_driver;
 
-	queue_work(system_long_wq, &ene_scan_work);
+	queue_work(system_freezable_wq, &ene_scan_work);
 	return 0;
 
 err_driver:
@@ -645,16 +639,11 @@ err_triggers:
 
 static void __exit ene_exit(void)
 {
-	int i, j;
-
-	bus_unregister_notifier(&i2c_bus_type, &ene_nb);
+	scoped_guard(mutex, &ene_exiting_lock)
+		ene_exiting = true;
 	cancel_work_sync(&ene_scan_work);
 
-	for (i = 0; i < ARRAY_SIZE(ene_buses); i++)
-		for (j = 0; j < ENE_BUS_MAX_ADDRS; j++)
-			if (ene_buses[i].clients[j])
-				i2c_unregister_device(ene_buses[i].clients[j]);
-
+	bus_unregister_notifier(&i2c_bus_type, &ene_nb);
 	i2c_del_driver(&ene_driver);
 	ene_unregister_triggers(ARRAY_SIZE(ene_effects));
 }
