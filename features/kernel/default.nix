@@ -1,7 +1,7 @@
 {
   flake.modules.nixos.kernel.imports = [
     ./cachyos.nix
-    ./ene-dram/nixos.nix
+    ./ene-rgb/nixos.nix
     ./nzxt-smart2/nixos.nix
     ./corsair-ccore/nixos.nix
     ./sp5100-tco/nixos.nix

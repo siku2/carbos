@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- * Multicolor LED driver for DIMMs with an ENE (ASUS Aura) controller.
- * Hardware effects are private LED triggers. The LEDs are turned off for
- * suspend because the DIMMs stay powered in S3. Register layout from
- * OpenRGB's ENESMBusController.
+ * Multicolor LED driver for ENE (ASUS Aura) controllers on DIMMs and GPUs.
+ * Hardware effects are private LED triggers. Register layout from OpenRGB's
+ * ENESMBusController.
  */
 
 #include <linux/i2c.h>
@@ -15,15 +14,11 @@
 #include <linux/pm.h>
 #include <linux/workqueue.h>
 
-#define ENE_ADDR_FIRST 0x70
-#define ENE_ADDR_COUNT 8
-
 #define ENE_CMD_SELECT 0x00
 #define ENE_CMD_WRITE 0x01
 #define ENE_CMD_READ 0x81
 
 #define ENE_REG_VERSION 0x1000
-#define ENE_REG_LED_COUNT 0x1c02
 #define ENE_REG_COLORS 0x8160
 #define ENE_REG_DIRECT 0x8020
 #define ENE_REG_MODE 0x8021
@@ -45,8 +40,25 @@
 #define ENE_EFFECT_COLOR BIT(0)
 #define ENE_EFFECT_DIRECTION BIT(1)
 
-static const char *const ene_versions[] = {
-	"AUDA0-E6K5-0101",
+struct ene_variant {
+	const char *function;
+	const char *version;
+	u16 led_count_reg;
+	/* DIMMs stay powered in S3, so their LEDs would stay lit. */
+	bool off_in_suspend;
+};
+
+static const struct ene_variant ene_dram = {
+	.function = "dram",
+	.version = "AUDA0-E6K5-0101",
+	.led_count_reg = 0x1c02,
+	.off_in_suspend = true,
+};
+
+static const struct ene_variant ene_gpu = {
+	.function = "gpu",
+	.version = "AUMA0-E6K5-0107",
+	.led_count_reg = 0x1c03,
 };
 
 struct ene_effect {
@@ -57,6 +69,7 @@ struct ene_effect {
 
 struct ene_led {
 	struct i2c_client *client;
+	const struct ene_variant *variant;
 	struct led_classdev_mc mc;
 	struct mc_subled subleds[3];
 	/* Serializes the cached state and the register writes. */
@@ -67,32 +80,45 @@ struct ene_led {
 	bool reverse;
 };
 
-static struct i2c_client *ene_clients[ENE_ADDR_COUNT];
-static DEFINE_MUTEX(ene_clients_lock);
-
 static struct ene_led *to_ene_led(struct led_classdev *cdev)
 {
 	return container_of(lcdev_to_mccdev(cdev), struct ene_led, mc);
 }
 
-static int ene_read(struct i2c_client *client, u16 reg)
+/* No other transfer may run between the register select and the access. */
+static int ene_access(struct i2c_client *client, u16 reg, char read_write,
+		      u8 command, union i2c_smbus_data *data)
 {
+	struct i2c_adapter *adap = client->adapter;
+	union i2c_smbus_data select = { .word = swab16(reg) };
 	int ret;
 
-	ret = i2c_smbus_write_word_swapped(client, ENE_CMD_SELECT, reg);
-	if (ret)
-		return ret;
-	return i2c_smbus_read_byte_data(client, ENE_CMD_READ);
+	i2c_lock_bus(adap, I2C_LOCK_SEGMENT);
+	ret = __i2c_smbus_xfer(adap, client->addr, client->flags,
+			       I2C_SMBUS_WRITE, ENE_CMD_SELECT,
+			       I2C_SMBUS_WORD_DATA, &select);
+	if (!ret)
+		ret = __i2c_smbus_xfer(adap, client->addr, client->flags,
+				       read_write, command,
+				       I2C_SMBUS_BYTE_DATA, data);
+	i2c_unlock_bus(adap, I2C_LOCK_SEGMENT);
+	return ret;
+}
+
+static int ene_read(struct i2c_client *client, u16 reg)
+{
+	union i2c_smbus_data data;
+	int ret;
+
+	ret = ene_access(client, reg, I2C_SMBUS_READ, ENE_CMD_READ, &data);
+	return ret ?: data.byte;
 }
 
 static int ene_write(struct i2c_client *client, u16 reg, u8 val)
 {
-	int ret;
+	union i2c_smbus_data data = { .byte = val };
 
-	ret = i2c_smbus_write_word_swapped(client, ENE_CMD_SELECT, reg);
-	if (ret)
-		return ret;
-	return i2c_smbus_write_byte_data(client, ENE_CMD_WRITE, val);
+	return ene_access(client, reg, I2C_SMBUS_WRITE, ENE_CMD_WRITE, &data);
 }
 
 static int ene_off(struct i2c_client *client)
@@ -296,7 +322,8 @@ static struct ene_effect ene_effects[] = {
 	ENE_EFFECT("random-flicker", 13, 0),
 };
 
-static int ene_read_version(struct i2c_client *client)
+static int ene_check_version(struct i2c_client *client,
+			     const struct ene_variant *variant)
 {
 	char version[ENE_VERSION_LEN];
 	int i, ret;
@@ -309,8 +336,7 @@ static int ene_read_version(struct i2c_client *client)
 	}
 	version[i] = '\0';
 
-	ret = match_string(ene_versions, ARRAY_SIZE(ene_versions), version);
-	if (ret < 0) {
+	if (strcmp(version, variant->version)) {
 		dev_err(&client->dev, "unsupported version '%s'\n", version);
 		return -ENODEV;
 	}
@@ -319,6 +345,7 @@ static int ene_read_version(struct i2c_client *client)
 
 static int ene_probe(struct i2c_client *client)
 {
+	const struct ene_variant *variant = i2c_get_match_data(client);
 	struct device *dev = &client->dev;
 	struct led_classdev *cdev;
 	struct ene_led *led;
@@ -332,11 +359,11 @@ static int ene_probe(struct i2c_client *client)
 	if (ret)
 		return ret;
 
-	ret = ene_read_version(client);
+	ret = ene_check_version(client, variant);
 	if (ret)
 		return ret;
 
-	ret = ene_read(client, ENE_REG_LED_COUNT);
+	ret = ene_read(client, variant->led_count_reg);
 	if (ret < 0)
 		return ret;
 	if (!ret || ret > ENE_MAX_LEDS) {
@@ -345,6 +372,7 @@ static int ene_probe(struct i2c_client *client)
 	}
 
 	led->client = client;
+	led->variant = variant;
 	led->led_count = ret;
 	led->speed = ENE_SPEED_DEFAULT;
 
@@ -360,8 +388,8 @@ static int ene_probe(struct i2c_client *client)
 	led->mc.num_colors = 3;
 
 	cdev = &led->mc.led_cdev;
-	cdev->name = devm_kasprintf(dev, GFP_KERNEL, "%s:rgb:dram",
-				    dev_name(dev));
+	cdev->name = devm_kasprintf(dev, GFP_KERNEL, "%s:rgb:%s",
+				    dev_name(dev), variant->function);
 	if (!cdev->name)
 		return -ENOMEM;
 	cdev->max_brightness = LED_FULL;
@@ -381,6 +409,9 @@ static int ene_suspend(struct device *dev)
 {
 	struct ene_led *led = i2c_get_clientdata(to_i2c_client(dev));
 
+	if (!led->variant->off_in_suspend)
+		return 0;
+
 	guard(mutex)(&led->lock);
 	ene_off(led->client);
 	return 0;
@@ -398,14 +429,15 @@ static int ene_resume(struct device *dev)
 static DEFINE_SIMPLE_DEV_PM_OPS(ene_pm, ene_suspend, ene_resume);
 
 static const struct i2c_device_id ene_id[] = {
-	{ "ene_dram" },
+	{ "ene_dram", (kernel_ulong_t)&ene_dram },
+	{ "ene_gpu", (kernel_ulong_t)&ene_gpu },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, ene_id);
 
 static struct i2c_driver ene_driver = {
 	.driver = {
-		.name = "ene_dram",
+		.name = "ene_rgb",
 		.pm = pm_sleep_ptr(&ene_pm),
 	},
 	.probe = ene_probe,
@@ -413,7 +445,7 @@ static struct i2c_driver ene_driver = {
 };
 
 /* The DIMM SPD hubs and PMICs share this port, the PMICs at 0x48 to 0x4f. */
-static bool ene_adapter_match(struct i2c_adapter *adap)
+static bool ene_dram_match(struct i2c_adapter *adap)
 {
 	struct device *parent = adap->dev.parent;
 	struct pci_dev *pdev;
@@ -427,6 +459,50 @@ static bool ene_adapter_match(struct i2c_adapter *adap)
 		return false;
 
 	return strstarts(adap->name, "SMBus PIIX4 adapter port 0 ");
+}
+
+static const struct pci_device_id ene_gpu_ids[] = {
+	{ PCI_DEVICE_SUB(PCI_VENDOR_ID_ATI, 0x744c, PCI_VENDOR_ID_ASUSTEK, 0x0506) },
+	{ }
+};
+
+/* Not the SMU buses, their transfers go through the SMU and race with suspend. */
+static bool ene_gpu_match(struct i2c_adapter *adap)
+{
+	struct device *parent = adap->dev.parent;
+
+	if (!parent || !dev_is_pci(parent))
+		return false;
+
+	return pci_match_id(ene_gpu_ids, to_pci_dev(parent)) &&
+	       !strcmp(adap->name, "AMDGPU DM i2c OEM bus");
+}
+
+#define ENE_BUS_MAX_ADDRS 8
+
+struct ene_bus {
+	bool (*match)(struct i2c_adapter *adap);
+	const char *type;
+	unsigned short first_addr;
+	unsigned short addr_count;
+	struct i2c_client *clients[ENE_BUS_MAX_ADDRS];
+};
+
+static struct ene_bus ene_buses[] = {
+	{ ene_dram_match, "ene_dram", 0x70, 8 },
+	{ ene_gpu_match, "ene_gpu", 0x67, 1 },
+};
+
+static DEFINE_MUTEX(ene_clients_lock);
+
+static bool ene_adapter_match(struct i2c_adapter *adap)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(ene_buses); i++)
+		if (ene_buses[i].match(adap))
+			return true;
+	return false;
 }
 
 /* ENE controllers echo the offset in registers 0xa0 to 0xaf. */
@@ -445,43 +521,58 @@ static int ene_detect(struct i2c_adapter *adap, unsigned short addr)
 	return 1;
 }
 
+struct ene_find {
+	const struct ene_bus *bus;
+	struct i2c_adapter *adap;
+};
+
 static int ene_find_adapter(struct device *dev, void *data)
 {
 	struct i2c_adapter *adap = i2c_verify_adapter(dev);
-	struct i2c_adapter **found = data;
+	struct ene_find *find = data;
 
-	if (!adap || !ene_adapter_match(adap))
+	if (!adap || !find->bus->match(adap))
 		return 0;
 
-	*found = i2c_get_adapter(adap->nr);
+	find->adap = i2c_get_adapter(adap->nr);
 	return 1;
 }
 
-static void ene_scan(struct work_struct *work)
+static void ene_scan_bus(struct ene_bus *bus)
 {
-	struct i2c_adapter *adap = NULL;
+	struct ene_find find = { .bus = bus };
 	int i;
 
 	/* Not i2c_for_each_dev(), it deadlocks with i2c_get_adapter(). */
-	bus_for_each_dev(&i2c_bus_type, NULL, &adap, ene_find_adapter);
-	if (!adap)
+	bus_for_each_dev(&i2c_bus_type, NULL, &find, ene_find_adapter);
+	if (!find.adap)
 		return;
 
-	for (i = 0; i < ENE_ADDR_COUNT; i++) {
-		unsigned short addrs[] = { ENE_ADDR_FIRST + i, I2C_CLIENT_END };
-		struct i2c_board_info info = { .type = "ene_dram" };
+	for (i = 0; i < bus->addr_count; i++) {
+		unsigned short addrs[] = { bus->first_addr + i, I2C_CLIENT_END };
+		struct i2c_board_info info = { };
 		struct i2c_client *client;
 
-		client = i2c_new_scanned_device(adap, &info, addrs, ene_detect);
+		strscpy(info.type, bus->type);
+		client = i2c_new_scanned_device(find.adap, &info, addrs,
+						ene_detect);
 		if (IS_ERR(client))
 			continue;
 
 		mutex_lock(&ene_clients_lock);
-		ene_clients[i] = client;
+		bus->clients[i] = client;
 		mutex_unlock(&ene_clients_lock);
 	}
 
-	i2c_put_adapter(adap);
+	i2c_put_adapter(find.adap);
+}
+
+static void ene_scan(struct work_struct *work)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(ene_buses); i++)
+		ene_scan_bus(&ene_buses[i]);
 }
 
 static DECLARE_WORK(ene_scan_work, ene_scan);
@@ -492,7 +583,7 @@ static int ene_bus_notify(struct notifier_block *nb, unsigned long action,
 	struct device *dev = data;
 	struct i2c_adapter *adap;
 	struct i2c_client *client;
-	int i;
+	int i, j;
 
 	switch (action) {
 	case BUS_NOTIFY_ADD_DEVICE:
@@ -505,9 +596,10 @@ static int ene_bus_notify(struct notifier_block *nb, unsigned long action,
 		if (!client)
 			break;
 		mutex_lock(&ene_clients_lock);
-		for (i = 0; i < ENE_ADDR_COUNT; i++)
-			if (ene_clients[i] == client)
-				ene_clients[i] = NULL;
+		for (i = 0; i < ARRAY_SIZE(ene_buses); i++)
+			for (j = 0; j < ENE_BUS_MAX_ADDRS; j++)
+				if (ene_buses[i].clients[j] == client)
+					ene_buses[i].clients[j] = NULL;
 		mutex_unlock(&ene_clients_lock);
 		break;
 	}
@@ -553,14 +645,15 @@ err_triggers:
 
 static void __exit ene_exit(void)
 {
-	int i;
+	int i, j;
 
 	bus_unregister_notifier(&i2c_bus_type, &ene_nb);
 	cancel_work_sync(&ene_scan_work);
 
-	for (i = 0; i < ENE_ADDR_COUNT; i++)
-		if (ene_clients[i])
-			i2c_unregister_device(ene_clients[i]);
+	for (i = 0; i < ARRAY_SIZE(ene_buses); i++)
+		for (j = 0; j < ENE_BUS_MAX_ADDRS; j++)
+			if (ene_buses[i].clients[j])
+				i2c_unregister_device(ene_buses[i].clients[j]);
 
 	i2c_del_driver(&ene_driver);
 	ene_unregister_triggers(ARRAY_SIZE(ene_effects));
@@ -569,5 +662,5 @@ static void __exit ene_exit(void)
 module_init(ene_init);
 module_exit(ene_exit);
 
-MODULE_DESCRIPTION("ENE DRAM RGB LED driver");
+MODULE_DESCRIPTION("ENE (ASUS Aura) RGB LED driver");
 MODULE_LICENSE("GPL");

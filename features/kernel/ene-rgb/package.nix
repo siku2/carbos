@@ -5,14 +5,14 @@
   kernelModuleMakeFlags,
 }:
 stdenv.mkDerivation {
-  pname = "ene-dram";
+  pname = "ene-rgb";
   inherit (kernel) version;
 
   src = lib.fileset.toSource {
     root = ./.;
     fileset = lib.fileset.unions [
       ./Kbuild
-      ./ene_dram.c
+      ./ene_rgb.c
     ];
   };
 

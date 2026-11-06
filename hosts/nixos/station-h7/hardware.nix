@@ -35,8 +35,7 @@
     fixes.amdgpuMstWake.enable = true;
     fixes.sp5100Tco.enable = true;
 
-    # The DIMMs stay powered in S3, so their LEDs would stay lit overnight.
-    drivers.eneDram.enable = true;
+    drivers.eneRgb.enable = true;
     drivers.nzxtSmart2.enable = true;
     drivers.corsairCcore.enable = true;
   };
