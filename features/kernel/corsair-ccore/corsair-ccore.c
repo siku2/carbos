@@ -21,6 +21,7 @@
 #include <linux/leds.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/reboot.h>
 #include <linux/spinlock.h>
 #include <linux/unaligned.h>
 #include <linux/workqueue.h>
@@ -35,9 +36,13 @@
 #define CCORE_WRITE_CHUNK (CCORE_ARGS_MAX - 1)
 
 #define CCORE_TIMEOUT_MS 500
+/* Switching to SELF takes the device about 700 ms. */
+#define CCORE_SELF_TIMEOUT_MS 2000
 #define CCORE_TICK_MS 1000
 #define CCORE_FRAME_MS 40
 #define CCORE_TEMP_ERRORS_MAX 3
+/* Resend unchanged duties, so a silent fall back to SELF is noticed. */
+#define CCORE_RESEND_TICKS 10
 
 #define CCORE_CHANNELS 7
 #define CCORE_CURVE_POINTS 7
@@ -71,12 +76,21 @@ enum {
 	FILE_LED_COUNT = 0x20,
 	FILE_TEMP = 0x21,
 	FILE_COLORS = 0x22,
+	FILE_STORAGE_FIRST = 28000,
 	FILE_FIXED_DUTY = 28001,
 	FILE_CURVES = 28002,
 };
 
 #define BUF_COLORS 0
 #define BUF_DATA 1
+
+/* Layout types at the start of each file. */
+#define TYPE_FIXED_DUTY 0x04
+#define TYPE_CURVES 0x05
+#define TYPE_RPM 0x06
+#define TYPE_FAN_STATUS 0x09
+#define TYPE_LED_COUNT 0x0f
+#define TYPE_TEMP 0x10
 
 #define FAN_ABSENT 0x01
 #define LED_PORT_CONNECTED 0x02
@@ -121,6 +135,7 @@ struct ccore_led {
 	struct mc_subled subleds[3];
 	u16 first;
 	u16 count;
+	unsigned int brightness;
 	bool rainbow;
 	u8 speed;
 	bool reverse;
@@ -136,8 +151,11 @@ struct ccore {
 	struct mutex lock;
 	struct delayed_work tick;
 	struct delayed_work animate;
+	struct notifier_block reboot_nb;
 	bool removing;
+	bool shutdown;
 	bool host;
+	unsigned int ticks;
 	bool colors_open;
 
 	/* Reply matching, protected by rx_lock. */
@@ -157,12 +175,15 @@ struct ccore {
 	struct ccore_led leds[CCORE_CHANNELS];
 	u16 led_total;
 	bool frame_sent;
+	/* A forced frame failed and has to be resent. */
+	bool frame_dirty;
+	bool power_hint;
 	u8 frame[2 + 3 * CCORE_MAX_LEDS];
 	u8 last_frame[2 + 3 * CCORE_MAX_LEDS];
 };
 
-static int ccore_xfer(struct ccore *cc, u8 cmd, const u8 *args, size_t len,
-		      u8 *resp)
+static int ccore_xfer_timeout(struct ccore *cc, u8 cmd, const u8 *args,
+			      size_t len, u8 *resp, unsigned int timeout_ms)
 {
 	unsigned long flags;
 	int ret;
@@ -185,19 +206,24 @@ static int ccore_xfer(struct ccore *cc, u8 cmd, const u8 *args, size_t len,
 
 	ret = hid_hw_output_report(cc->hdev, cc->tx, CCORE_REPORT_SIZE + 1);
 	if (ret < 0)
-		goto out;
+		goto resync;
 
 	if (!wait_for_completion_timeout(&cc->rx_done,
-					 msecs_to_jiffies(CCORE_TIMEOUT_MS))) {
+					 msecs_to_jiffies(timeout_ms))) {
 		ret = -ETIMEDOUT;
-		goto out;
+		goto resync;
 	}
 
 	if (resp)
 		memcpy(resp, cc->rx, CCORE_REPORT_SIZE);
 	/* A positive return value is the device status. */
 	ret = cc->rx[2];
+	goto out;
 
+resync:
+	/* Re-enter HOST, which reopens the files, before trusting replies. */
+	cc->host = false;
+	cc->colors_open = false;
 out:
 	spin_lock_irqsave(&cc->rx_lock, flags);
 	cc->rx_pending = false;
@@ -205,11 +231,19 @@ out:
 	return ret;
 }
 
+static int ccore_xfer(struct ccore *cc, u8 cmd, const u8 *args, size_t len,
+		      u8 *resp)
+{
+	return ccore_xfer_timeout(cc, cmd, args, len, resp, CCORE_TIMEOUT_MS);
+}
+
 static int ccore_set_mode(struct ccore *cc, u8 mode)
 {
 	u8 args[] = { PROP_MODE, 0x00, mode };
 
-	return ccore_xfer(cc, CMD_SET_PROPERTY, args, sizeof(args), NULL);
+	return ccore_xfer_timeout(cc, CMD_SET_PROPERTY, args, sizeof(args),
+				  NULL, mode == MODE_SELF ?
+				  CCORE_SELF_TIMEOUT_MS : CCORE_TIMEOUT_MS);
 }
 
 static int ccore_unbind(struct ccore *cc, u8 buf)
@@ -222,8 +256,12 @@ static int ccore_unbind(struct ccore *cc, u8 buf)
 static int ccore_open(struct ccore *cc, u8 buf, u16 file)
 {
 	u8 args[] = { buf, file & 0xff, file >> 8 };
+	int ret;
 
-	ccore_unbind(cc, buf);
+	/* A buffer still bound to another file would get the next write. */
+	ret = ccore_unbind(cc, buf);
+	if (ret)
+		return ret;
 	return ccore_xfer(cc, CMD_OPEN, args, sizeof(args), NULL);
 }
 
@@ -271,6 +309,10 @@ static int ccore_write_file(struct ccore *cc, u16 file, const u8 *data,
 {
 	int ret;
 
+	/* Device storage is never written. */
+	if (file >= FILE_STORAGE_FIRST || !cc->host)
+		return -EPERM;
+
 	ret = ccore_open(cc, BUF_DATA, file);
 	if (!ret)
 		ret = ccore_write_stream(cc, BUF_DATA, data, len);
@@ -278,11 +320,22 @@ static int ccore_write_file(struct ccore *cc, u16 file, const u8 *data,
 	return ret;
 }
 
-/* Live files start with a 2 byte type and a 1 byte count. */
-static const u8 *ccore_items(const u8 *data, u8 *count)
+/*
+ * Files start with a 2 byte type and a 1 byte count. The type also catches
+ * a late reply that was matched to the wrong request.
+ */
+static const u8 *ccore_items(const u8 *data, u16 type, u8 *count)
 {
+	if (get_unaligned_le16(data) != type)
+		return NULL;
 	*count = min_t(u8, data[2], CCORE_CHANNELS);
 	return data + 3;
+}
+
+static bool ccore_present(const struct ccore *cc, int channel)
+{
+	/* The pump is always driven, an absent reading must not stop it. */
+	return !channel || cc->fan_status[channel] != FAN_ABSENT;
 }
 
 static void ccore_hue_to_rgb(unsigned int hue, unsigned int brightness,
@@ -311,7 +364,7 @@ static void ccore_render(struct ccore *cc)
 
 	for (i = 0; i < CCORE_CHANNELS; i++) {
 		struct ccore_led *led = &cc->leds[i];
-		unsigned int brightness = led->mc.led_cdev.brightness;
+		unsigned int brightness = led->brightness;
 		u8 *p = rgb + 3 * led->first;
 
 		if (!led->registered || !brightness)
@@ -367,10 +420,12 @@ static int ccore_write_frame(struct ccore *cc, bool force)
 
 	memcpy(cc->last_frame, cc->frame, len);
 	cc->frame_sent = true;
+	cc->frame_dirty = false;
 	return 0;
 
 err:
 	cc->colors_open = false;
+	cc->frame_dirty = true;
 	if (ret == STATUS_INVALID_STATE)
 		ccore_lost_host(cc);
 	return ret;
@@ -382,7 +437,7 @@ static bool ccore_animating(struct ccore *cc)
 
 	for (i = 0; i < CCORE_CHANNELS; i++)
 		if (cc->leds[i].registered && cc->leds[i].rainbow &&
-		    cc->leds[i].mc.led_cdev.brightness)
+		    cc->leds[i].brightness)
 			return true;
 	return false;
 }
@@ -457,9 +512,8 @@ static int ccore_apply_duties(struct ccore *cc)
 	u8 duty[CCORE_CHANNELS];
 	int i, n = 0, ret;
 
+	/* Absent channels too, a fan can be detected after probe. */
 	for (i = 0; i < CCORE_CHANNELS; i++) {
-		if (cc->fan_status[i] == FAN_ABSENT)
-			continue;
 		duty[i] = ccore_duty(cc, i);
 		if (duty[i] == cc->channels[i].sent)
 			continue;
@@ -491,14 +545,18 @@ static int ccore_read_sensors(struct ccore *cc)
 	ret = ccore_read_file(cc, FILE_RPM, data, sizeof(data));
 	if (ret)
 		return ret;
-	items = ccore_items(data, &count);
+	items = ccore_items(data, TYPE_RPM, &count);
+	if (!items)
+		return -EPROTO;
 	for (i = 0; i < count; i++)
 		cc->rpm[i] = get_unaligned_le16(items + 2 * i);
 
 	ret = ccore_read_file(cc, FILE_TEMP, data, sizeof(data));
 	if (ret)
 		return ret;
-	items = ccore_items(data, &count);
+	items = ccore_items(data, TYPE_TEMP, &count);
+	if (!items)
+		return -EPROTO;
 	temp = get_unaligned_le16(items + 1);
 	if (count && !items[0] && temp > 0 && temp < 1000) {
 		cc->temp = temp * 100;
@@ -529,7 +587,7 @@ static void ccore_tick_work(struct work_struct *work)
 	struct ccore *cc = container_of(to_delayed_work(work), struct ccore,
 					tick);
 	bool entered = false;
-	int ret;
+	int i, ret;
 
 	guard(mutex)(&cc->lock);
 
@@ -541,16 +599,20 @@ static void ccore_tick_work(struct work_struct *work)
 		if (ret)
 			goto out;
 		entered = true;
+	} else if (++cc->ticks % CCORE_RESEND_TICKS == 0) {
+		for (i = 0; i < CCORE_CHANNELS; i++)
+			cc->channels[i].sent = 0xff;
 	}
 
 	ret = ccore_read_sensors(cc);
 	if (ret)
 		cc->temp_errors++;
-	if (ret != STATUS_INVALID_STATE)
+	/* After a timeout, re-enter HOST before writing anything. */
+	if (ret != STATUS_INVALID_STATE && cc->host)
 		ret = ccore_apply_duties(cc);
 	if (ret == STATUS_INVALID_STATE)
 		ccore_lost_host(cc);
-	else if (entered)
+	else if (cc->host && (entered || cc->frame_dirty))
 		ccore_write_frame(cc, true);
 
 out:
@@ -564,20 +626,24 @@ static int ccore_read_config(struct ccore *cc)
 {
 	u8 data[CURVES_SIZE], count;
 	const u8 *items;
-	unsigned int pump_leds;
+	unsigned int pump_leds, first, leds;
 	int i, j, ret;
 
 	ret = ccore_read_file(cc, FILE_FAN_STATUS, data, CCORE_READ_CHUNK);
 	if (ret)
 		return ret;
-	items = ccore_items(data, &count);
+	items = ccore_items(data, TYPE_FAN_STATUS, &count);
+	if (!items)
+		return -EPROTO;
 	for (i = 0; i < CCORE_CHANNELS; i++)
 		cc->fan_status[i] = i < count ? items[i] : FAN_ABSENT;
 
 	ret = ccore_read_file(cc, FILE_LED_COUNT, data, CCORE_READ_CHUNK);
 	if (ret)
 		return ret;
-	items = ccore_items(data, &count);
+	items = ccore_items(data, TYPE_LED_COUNT, &count);
+	if (!items)
+		return -EPROTO;
 	pump_leds = count ? get_unaligned_le16(items + 2) : 0;
 	for (i = 0; i < count; i++) {
 		struct ccore_led *led = &cc->leds[i];
@@ -585,30 +651,47 @@ static int ccore_read_config(struct ccore *cc)
 		if (get_unaligned_le16(items + 4 * i) != LED_PORT_CONNECTED)
 			continue;
 		/* Each fan port has a fixed slot after the pump LEDs. */
-		led->first = i ? pump_leds + CCORE_PORT_LEDS * (i - 1) : 0;
-		led->count = get_unaligned_le16(items + 4 * i + 2);
-		if ((i && led->count > CCORE_PORT_LEDS) ||
-		    led->first + led->count > CCORE_MAX_LEDS)
+		first = i ? pump_leds + CCORE_PORT_LEDS * (i - 1) : 0;
+		leds = get_unaligned_le16(items + 4 * i + 2);
+		if ((i && leds > CCORE_PORT_LEDS) ||
+		    first + leds > CCORE_MAX_LEDS)
 			return -EINVAL;
+		led->first = first;
+		led->count = leds;
 		cc->led_total = led->first + led->count;
 	}
 
 	/* The stored cooling configuration that SELF mode runs. */
+	for (i = 0; i < CCORE_CHANNELS; i++) {
+		cc->channels[i].enable = 1;
+		cc->channels[i].pwm = 255;
+		for (j = 0; j < CCORE_CURVE_POINTS; j++)
+			cc->channels[i].points[j].pwm = 255;
+	}
+
 	ret = ccore_read_file(cc, FILE_FIXED_DUTY, data, FIXED_DUTY_SIZE);
 	if (ret)
 		return ret;
-	items = ccore_items(data, &count);
+	items = ccore_items(data, TYPE_FIXED_DUTY, &count);
+	if (!items)
+		return -EPROTO;
 	for (i = 0; i < count; i++) {
 		u16 fixed = get_unaligned_le16(items + 2 * i);
 
-		cc->channels[i].enable = fixed ? 1 : 2;
-		cc->channels[i].pwm = DIV_ROUND_CLOSEST(min_t(u16, fixed, 100) * 255, 100);
+		if (fixed)
+			cc->channels[i].pwm = DIV_ROUND_CLOSEST(min_t(u16, fixed, 100) * 255, 100);
+		else
+			cc->channels[i].enable = 2;
 	}
 
 	ret = ccore_read_file(cc, FILE_CURVES, data, CURVES_SIZE);
 	if (ret)
 		return ret;
-	items = ccore_items(data, &count);
+	items = ccore_items(data, TYPE_CURVES, &count);
+	if (!items)
+		return -EPROTO;
+	for (i = count; i < CCORE_CHANNELS; i++)
+		cc->channels[i].enable = 1;
 	for (i = 0; i < count; i++) {
 		const u8 *curve = items + CURVE_SIZE * i;
 		u8 points = min_t(u8, curve[1], CCORE_CURVE_POINTS);
@@ -637,9 +720,9 @@ static umode_t ccore_is_visible(const void *data, enum hwmon_sensor_types type,
 	case hwmon_temp:
 		return 0444;
 	case hwmon_fan:
-		return cc->fan_status[channel] == FAN_ABSENT ? 0 : 0444;
+		return ccore_present(cc, channel) ? 0444 : 0;
 	case hwmon_pwm:
-		return cc->fan_status[channel] == FAN_ABSENT ? 0 : 0644;
+		return ccore_present(cc, channel) ? 0644 : 0;
 	default:
 		return 0;
 	}
@@ -677,6 +760,7 @@ static int ccore_write(struct device *dev, enum hwmon_sensor_types type,
 {
 	struct ccore *cc = dev_get_drvdata(dev);
 	struct ccore_channel *ch = &cc->channels[channel];
+	int ret;
 
 	guard(mutex)(&cc->lock);
 
@@ -691,7 +775,12 @@ static int ccore_write(struct device *dev, enum hwmon_sensor_types type,
 		ch->enable = 1;
 	}
 
-	return cc->host ? ccore_apply_duties(cc) : 0;
+	if (!cc->host)
+		return 0;
+	ret = ccore_apply_duties(cc);
+	if (ret == STATUS_INVALID_STATE)
+		ccore_lost_host(cc);
+	return ret > 0 ? -EIO : ret;
 }
 
 static int ccore_read_string(struct device *dev, enum hwmon_sensor_types type,
@@ -831,7 +920,7 @@ static umode_t ccore_curve_visible(struct kobject *kobj, struct attribute *attr,
 	struct ccore *cc = dev_get_drvdata(kobj_to_dev(kobj));
 	int channel = n / (2 * CCORE_CURVE_POINTS);
 
-	return cc->fan_status[channel] == FAN_ABSENT ? 0 : attr->mode;
+	return ccore_present(cc, channel) ? attr->mode : 0;
 }
 
 static const struct attribute_group ccore_curve_group = {
@@ -857,6 +946,7 @@ static int ccore_led_set(struct led_classdev *cdev,
 	int ret;
 
 	guard(mutex)(&cc->lock);
+	led->brightness = brightness;
 	ret = ccore_write_frame(cc, false);
 	ccore_schedule_frame(cc);
 	return ret > 0 ? -EIO : ret;
@@ -871,6 +961,7 @@ static int ccore_rainbow_activate(struct led_classdev *cdev)
 	led->rainbow = true;
 	if (!cdev->brightness)
 		cdev->brightness = cdev->max_brightness;
+	led->brightness = cdev->brightness;
 	ccore_write_frame(cc, false);
 	ccore_schedule_frame(cc);
 	return 0;
@@ -1006,7 +1097,7 @@ static int ccore_leds_register(struct ccore *cc)
 		cdev->max_brightness = LED_FULL;
 		cdev->brightness_set_blocking = ccore_led_set;
 		cdev->trigger_type = &ccore_trigger_type;
-		cdev->flags = LED_RETAIN_AT_SHUTDOWN;
+		cdev->flags = LED_RETAIN_AT_SHUTDOWN | LED_HW_PLUGGABLE;
 
 		ret = led_classdev_multicolor_register(dev, &led->mc);
 		if (ret)
@@ -1026,12 +1117,12 @@ static int ccore_raw_event(struct hid_device *hdev, struct hid_report *report,
 	struct ccore *cc = hid_get_drvdata(hdev);
 	unsigned long flags;
 
-	if (!cc || size < 3)
+	if (!cc || size < CCORE_REPORT_SIZE)
 		return 0;
 
 	spin_lock_irqsave(&cc->rx_lock, flags);
 	if (cc->rx_pending && data[1] == cc->rx_cmd) {
-		memcpy(cc->rx, data, min_t(int, size, CCORE_REPORT_SIZE));
+		memcpy(cc->rx, data, CCORE_REPORT_SIZE);
 		cc->rx_pending = false;
 		complete(&cc->rx_done);
 	}
@@ -1050,15 +1141,34 @@ static void ccore_stop(struct ccore *cc)
 /* Hands cooling and lighting back to the firmware. */
 static void ccore_release(struct ccore *cc)
 {
+	int ret;
+
 	guard(mutex)(&cc->lock);
-	ccore_set_mode(cc, MODE_SELF);
+	ret = ccore_set_mode(cc, MODE_SELF);
+	if (ret)
+		hid_warn(cc->hdev, "failed to hand back to SELF: %d\n", ret);
 	ccore_lost_host(cc);
+}
+
+static int ccore_reboot_notify(struct notifier_block *nb, unsigned long action,
+			       void *data)
+{
+	struct ccore *cc = container_of(nb, struct ccore, reboot_nb);
+
+	scoped_guard(mutex, &cc->lock)
+		cc->shutdown = true;
+	ccore_stop(cc);
+	ccore_release(cc);
+	return NOTIFY_DONE;
 }
 
 static void ccore_start(struct ccore *cc)
 {
-	scoped_guard(mutex, &cc->lock)
+	scoped_guard(mutex, &cc->lock) {
+		if (cc->shutdown)
+			return;
 		cc->removing = false;
+	}
 	mod_delayed_work(system_dfl_wq, &cc->tick, 0);
 	scoped_guard(mutex, &cc->lock)
 		ccore_schedule_frame(cc);
@@ -1087,6 +1197,9 @@ static int ccore_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		return -ENOMEM;
 
 	cc->hdev = hdev;
+	/* Nothing runs until ccore_start(). */
+	cc->removing = true;
+	cc->temp_errors = CCORE_TEMP_ERRORS_MAX;
 	spin_lock_init(&cc->rx_lock);
 	init_completion(&cc->rx_done);
 	INIT_DELAYED_WORK(&cc->tick, ccore_tick_work);
@@ -1097,13 +1210,15 @@ static int ccore_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 	pump_min = clamp_t(unsigned short, pump_min, 50, 100);
 
-	ret = hid_hw_start(hdev, HID_CONNECT_HIDRAW);
+	/* No hidraw, userspace commands would interleave with the driver's. */
+	ret = hid_hw_start(hdev, 0);
 	if (ret)
 		return ret;
 
 	ret = hid_hw_open(hdev);
 	if (ret)
 		goto out_stop;
+	cc->power_hint = !hid_hw_power(hdev, PM_HINT_FULLON);
 
 	hid_set_drvdata(hdev, cc);
 	hid_device_io_start(hdev);
@@ -1112,6 +1227,13 @@ static int ccore_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		ret = ccore_enter_host(cc);
 		if (!ret)
 			ret = ccore_read_config(cc);
+		if (!ret)
+			ret = ccore_read_sensors(cc);
+		if (!ret)
+			ret = ccore_apply_duties(cc);
+		/* Lighting is best effort, the tick retries a failed frame. */
+		if (!ret)
+			ccore_write_frame(cc, true);
 	}
 	if (ret) {
 		hid_err(hdev, "setup failed: %d\n", ret);
@@ -1131,8 +1253,16 @@ static int ccore_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	if (ret)
 		goto out_hwmon;
 
+	cc->reboot_nb.notifier_call = ccore_reboot_notify;
+	ret = register_reboot_notifier(&cc->reboot_nb);
+	if (ret)
+		goto out_leds;
+
 	ccore_start(cc);
 	return 0;
+
+out_leds:
+	ccore_leds_unregister(cc);
 
 out_hwmon:
 	hwmon_device_unregister(cc->hwmon);
@@ -1140,6 +1270,8 @@ out_release:
 	ccore_release(cc);
 	hid_device_io_stop(hdev);
 	hid_set_drvdata(hdev, NULL);
+	if (cc->power_hint)
+		hid_hw_power(hdev, PM_HINT_NORMAL);
 	hid_hw_close(hdev);
 out_stop:
 	hid_hw_stop(hdev);
@@ -1155,10 +1287,15 @@ static void ccore_remove(struct hid_device *hdev)
 		return;
 	}
 
+	/* The device's replies are needed to hand it back. */
+	hid_device_io_start(hdev);
+	unregister_reboot_notifier(&cc->reboot_nb);
 	ccore_stop(cc);
 	hwmon_device_unregister(cc->hwmon);
 	ccore_leds_unregister(cc);
 	ccore_release(cc);
+	if (cc->power_hint)
+		hid_hw_power(hdev, PM_HINT_NORMAL);
 	hid_hw_close(hdev);
 	hid_hw_stop(hdev);
 }
@@ -1168,9 +1305,15 @@ static int __maybe_unused ccore_suspend(struct hid_device *hdev,
 {
 	struct ccore *cc = hid_get_drvdata(hdev);
 
+	/* Autosuspend would hand the device to SELF with nothing to resume it. */
+	if (PMSG_IS_AUTO(message))
+		return -EBUSY;
+
 	if (cc) {
 		ccore_stop(cc);
 		ccore_release(cc);
+		scoped_guard(mutex, &cc->lock)
+			cc->temp_errors = CCORE_TEMP_ERRORS_MAX;
 	}
 	return 0;
 }
