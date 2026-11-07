@@ -58,6 +58,10 @@
         HowToCheck = "Manual";
         StartDaemonOnAppLaunch = false;
       };
+      CustomSystemPreferences."/Library/Preferences/org.mozilla.firefox" = {
+        EnterprisePoliciesEnabled = true;
+        DisableAppUpdate = true;
+      };
     };
 
     # Spotlight has no nix-darwin option and its exclusion list lives in
