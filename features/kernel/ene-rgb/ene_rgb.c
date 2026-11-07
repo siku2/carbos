@@ -431,7 +431,9 @@ static int ene_resume(struct device *dev)
 
 	guard(mutex)(&led->lock);
 	led->suspended = false;
-	ene_apply(led, led->mc.led_cdev.brightness);
+	/* The GPU keeps its state in S3 and its bus fails right after resume. */
+	if (led->variant->off_in_suspend)
+		ene_apply(led, led->mc.led_cdev.brightness);
 	return 0;
 }
 
