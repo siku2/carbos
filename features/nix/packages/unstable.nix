@@ -25,6 +25,7 @@
         chatgpt
         claude-code
         codex
+        fan2go
         firefox-bin-unwrapped
         google-chrome
         opencode
