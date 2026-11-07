@@ -7,6 +7,7 @@
   imports = [
     inputs.chaotic.nixosModules.default
     ./audio.nix
+    ./cooling.nix
     ./disk.nix
     ./firmware.nix
     ./gaming.nix
@@ -16,6 +17,7 @@
     agents
     ardour
     cloud
+    cooling
     desktop
     dev
     firefox
