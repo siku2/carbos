@@ -1145,7 +1145,7 @@ static void ccore_release(struct ccore *cc)
 
 	guard(mutex)(&cc->lock);
 	ret = ccore_set_mode(cc, MODE_SELF);
-	if (ret)
+	if (ret && ret != -ENODEV)
 		hid_warn(cc->hdev, "failed to hand back to SELF: %d\n", ret);
 	ccore_lost_host(cc);
 }
