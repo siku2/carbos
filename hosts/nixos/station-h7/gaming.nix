@@ -54,7 +54,20 @@ in
     specialisation.enable = false;
   };
 
-  services.lact.enable = true;
+  services.lact = {
+    enable = true;
+    settings = {
+      version = 5;
+      daemon = {
+        log_level = "info";
+        admin_group = "wheel";
+        disable_clocks_cleanup = false;
+      };
+      apply_settings_timer = 5;
+      # The stock 55 C is below the idle hotspot, so the fans never stop.
+      gpus."1002:744C-1043:0506-0000:03:00.0".pmfw_options.zero_rpm_threshold = 65;
+    };
+  };
 
   environment.systemPackages = with pkgs; [
     mangohud
