@@ -34,8 +34,8 @@ interface Manifest {
   esp: string;
   // Where flashes that need their own boot keep the pending job and result.
   state: string;
-  // The specialisation that boots with the GPU on pci-stub.
-  flashBoot: string;
+  // The one-shot boot entry that keeps the GPU on pci-stub.
+  flashBoot: { name: string; params: string[] };
   devices: Record<string, Device>;
 }
 
@@ -368,21 +368,54 @@ function pciDevice(pciId: string, subsystemId: string): PciDevice | undefined {
   };
 }
 
-// The boot entry of the flash specialisation for the booted generation, so
-// the flash boot runs the same manifest.
-function flashEntry(specialisation: string): string {
-  const entries = JSON.parse(run("bootctl", ["list", "--json=short"])) as {
-    id: string;
-    isSelected: boolean;
-  }[];
-  const base = entries.find((entry) => entry.isSelected)?.id;
-  const id = base?.replace(/\.conf$/, `-specialisation-${specialisation}.conf`);
-  if (id === undefined || !entries.some((entry) => entry.id === id)) {
+interface BootEntry {
+  id: string;
+  path: string;
+  version?: string;
+  machineId?: string;
+  linux?: string;
+  initrd?: string[];
+  options?: string;
+}
+
+function bootEntries(): BootEntry[] {
+  return JSON.parse(run("bootctl", ["list", "--json=short"])) as BootEntry[];
+}
+
+// Writes the flash entry next to the entry of the current system, so the
+// flash boot runs the same manifest. Returns its ID.
+function writeFlashEntry(flashBoot: Manifest["flashBoot"]): string {
+  const init = `init=${realpathSync("/run/current-system")}/init`;
+  const base = bootEntries().find((entry) =>
+    entry.options?.split(" ").includes(init),
+  );
+  if (base?.linux === undefined || base.options === undefined) {
     throw new Failure(
-      `no ${specialisation} boot entry for ${base ?? "the default"}`,
+      "the current system has no boot entry, run nixos-rebuild switch first",
     );
   }
+  const options = base.options
+    .split(" ")
+    .filter((option) => option !== "" && option !== "splash");
+  const id = `${flashBoot.name}.conf`;
+  const lines = [
+    "title Firmware flash",
+    ...(base.version === undefined ? [] : [`version ${base.version}`]),
+    `linux ${base.linux}`,
+    ...(base.initrd ?? []).map((initrd) => `initrd ${initrd}`),
+    `options ${[...options, ...flashBoot.params].join(" ")}`,
+    ...(base.machineId === undefined ? [] : [`machine-id ${base.machineId}`]),
+  ];
+  const path = join(dirname(base.path), id);
+  console.log(`${dryRun ? "Would write" : "Writing"} ${path}`);
+  if (!dryRun) writeFileSync(path, `${lines.join("\n")}\n`);
   return id;
+}
+
+function removeFlashEntry(flashBoot: Manifest["flashBoot"]): void {
+  const id = `${flashBoot.name}.conf`;
+  const entry = bootEntries().find((candidate) => candidate.id === id);
+  if (entry !== undefined) rmSync(entry.path);
 }
 
 function amdGpuAdapter(
@@ -428,8 +461,9 @@ function amdGpuAdapter(
       console.log(`Running ${model}, image ${image}`);
       // The PSP only takes the update before a driver loads its secure OS,
       // so the flash runs in a boot that keeps the GPU on pci-stub.
-      const entry = flashEntry(manifest.flashBoot);
+      const entry = writeFlashEntry(manifest.flashBoot);
       if (!write("bootctl", ["set-oneshot", entry])) {
+        removeFlashEntry(manifest.flashBoot);
         throw new Failure(`bootctl could not select ${entry}`);
       }
       // Only after the one-shot, so a job never waits for a manual pick of
@@ -454,6 +488,7 @@ function amdGpuAdapter(
 
 // Runs in the flash boot. The service reboots back whatever the outcome.
 function runPending(manifest: Manifest): void {
+  removeFlashEntry(manifest.flashBoot);
   const file = join(manifest.state, "pending.json");
   if (!existsSync(file)) {
     console.log("No pending flash.");

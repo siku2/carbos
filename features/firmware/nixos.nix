@@ -120,7 +120,14 @@ let
   manifest = json.generate "firmware.json" {
     esp = "${config.boot.loader.efi.efiSysMountPoint}/firmware";
     state = "/var/lib/firmware-flash";
-    inherit flashBoot;
+    flashBoot = {
+      name = flashBoot;
+      params = [
+        "pci-stub.ids=${lib.concatMapStringsSep "," (gpu: gpu.method.amdGpu.pciId) gpus}"
+        "systemd.unit=${flashBoot}.target"
+        "plymouth.enable=0"
+      ];
+    };
     devices = lib.mapAttrs (_: device: {
       inherit (device) description version method;
       package = "${device.package}";
@@ -152,17 +159,10 @@ in
     { environment.systemPackages = [ firmware ]; }
 
     # The PSP bootloader only takes a VBIOS update until a driver loads its
-    # secure OS. This boot keeps the GPU on pci-stub and stops short of the
-    # desktop, flashes, then reboots into the default entry.
+    # secure OS. The firmware command adds a one-shot boot entry with the
+    # flashBoot params, which keeps the GPU on pci-stub and stops short of
+    # the desktop. The flash then reboots into the default entry.
     (lib.mkIf (gpus != [ ]) {
-      specialisation.${flashBoot}.configuration = {
-        boot.kernelParams = [
-          "pci-stub.ids=${lib.concatMapStringsSep "," (gpu: gpu.method.amdGpu.pciId) gpus}"
-          "systemd.unit=${flashBoot}.target"
-        ];
-        boot.plymouth.enable = lib.mkForce false;
-      };
-
       systemd.targets.${flashBoot} = {
         description = "Firmware flash boot";
         requires = [ "multi-user.target" ];
