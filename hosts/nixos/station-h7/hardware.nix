@@ -1,5 +1,4 @@
-_:
-{
+_: {
   nixpkgs.hostPlatform = "x86_64-linux";
 
   boot = {
@@ -38,6 +37,7 @@ _:
     drivers.eneRgb.enable = true;
     drivers.nzxtSmart2.enable = true;
     drivers.corsairCcore.enable = true;
+    drivers.razerKbd.enable = true;
   };
 
   hardware = {
