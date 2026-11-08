@@ -1,7 +1,18 @@
 { callPackage, path }:
 let
   # Inside the overlay, `vencord` already refers to this package.
-  upstream = callPackage (path + "/pkgs/by-name/ve/vencord/package.nix") { };
+  nixpkgs = callPackage (path + "/pkgs/by-name/ve/vencord/package.nix") { };
+
+  # TODO: drop once nixpkgs ships 1.15.16, which fixes Discord's rspack update.
+  upstream = nixpkgs.overrideAttrs (old: {
+    version = "1.15.16";
+    src = old.src.override { hash = "sha256-aUJubLJpyLAZWiOezqFxPY6oVPgWVPQpajFqrJvrO9U="; };
+    patches = [ ];
+    postPatch = "";
+    pnpmDeps = old.pnpmDeps.overrideAttrs {
+      outputHash = "sha256-1HcQH0ZZixQvziehIDhyBUB8v5ckufxrS2yUq2BcMVQ=";
+    };
+  });
 
   workspace = callPackage ./workspace.nix { inherit types; };
   types = callPackage ./types.nix { vencord = upstream; };
