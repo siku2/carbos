@@ -670,15 +670,20 @@ static int rkbd_led_register(struct rkbd *kb, struct rkbd_led *led,
 	return ret;
 }
 
+static void rkbd_led_unregister(struct rkbd_led *led)
+{
+	if (led->registered)
+		led_classdev_multicolor_unregister(&led->mc);
+	led->registered = false;
+}
+
 static void rkbd_leds_unregister(struct rkbd *kb)
 {
 	unsigned int i;
 
 	for (i = 0; i < RKBD_KEYS; i++)
-		if (kb->keys[i].registered)
-			led_classdev_multicolor_unregister(&kb->keys[i].mc);
-	if (kb->backlight.registered)
-		led_classdev_multicolor_unregister(&kb->backlight.mc);
+		rkbd_led_unregister(&kb->keys[i]);
+	rkbd_led_unregister(&kb->backlight);
 }
 
 static int rkbd_leds_register(struct rkbd *kb)
@@ -726,6 +731,18 @@ static int rkbd_reboot_notify(struct notifier_block *nb, unsigned long action,
 	return NOTIFY_DONE;
 }
 
+/*
+ * Events can queue LED work through the Fn keys, so they stop before the
+ * LEDs go.
+ */
+static void rkbd_teardown(struct rkbd *kb)
+{
+	rkbd_release(kb);
+	hid_hw_stop(kb->hdev);
+	cancel_delayed_work_sync(&kb->animate);
+	rkbd_leds_unregister(kb);
+}
+
 static const struct rkbd_fn_key *rkbd_fn_key(u16 code, unsigned int *index)
 {
 	unsigned int i;
@@ -763,12 +780,13 @@ static int rkbd_event(struct hid_device *hdev, struct hid_field *field,
 		return 0;
 
 	/* A key pressed with Fn is released as the Fn key, even without Fn. */
-	if (!kb->fn && !test_bit(index, &kb->fn_pressed))
-		return 0;
-	if (value)
+	if (value) {
+		if (!kb->fn)
+			return 0;
 		set_bit(index, &kb->fn_pressed);
-	else
-		clear_bit(index, &kb->fn_pressed);
+	} else if (!test_and_clear_bit(index, &kb->fn_pressed)) {
+		return 0;
+	}
 
 	if (key->fn_code)
 		input_event(field->hidinput->input, EV_KEY, key->fn_code,
@@ -890,19 +908,17 @@ static int rkbd_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 	ret = rkbd_leds_register(kb);
 	if (ret)
-		goto out_release;
+		goto out_teardown;
 
 	kb->reboot_nb.notifier_call = rkbd_reboot_notify;
 	ret = register_reboot_notifier(&kb->reboot_nb);
 	if (ret)
-		goto out_leds;
+		goto out_teardown;
 	return 0;
 
-out_leds:
-	rkbd_leds_unregister(kb);
-out_release:
-	rkbd_release(kb);
-	cancel_delayed_work_sync(&kb->animate);
+out_teardown:
+	rkbd_teardown(kb);
+	goto out_drvdata;
 out_stop:
 	hid_hw_stop(hdev);
 out_drvdata:
@@ -916,11 +932,10 @@ static void rkbd_remove(struct hid_device *hdev)
 
 	if (kb) {
 		unregister_reboot_notifier(&kb->reboot_nb);
-		rkbd_release(kb);
-		cancel_delayed_work_sync(&kb->animate);
-		rkbd_leds_unregister(kb);
+		rkbd_teardown(kb);
+	} else {
+		hid_hw_stop(hdev);
 	}
-	hid_hw_stop(hdev);
 }
 
 static int __maybe_unused rkbd_suspend(struct hid_device *hdev,
