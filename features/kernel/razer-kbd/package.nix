@@ -12,6 +12,7 @@ stdenv.mkDerivation {
     root = ./.;
     fileset = lib.fileset.unions [
       ./Kbuild
+      ./layout.h
       ./razer-kbd.c
     ];
   };
