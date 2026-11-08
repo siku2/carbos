@@ -3,7 +3,9 @@
  * Razer BlackWidow Chroma V2 (1532:0221).
  *
  * The keyboard takes 90 byte feature reports on interface 1, the layout
- * openrazer documents. Key input is handled like hid-generic does.
+ * openrazer documents. The driver keeps it in driver mode, where the
+ * keyboard reports M1-M5 and Fn to the host instead of handling them, and
+ * implements the Fn layer.
  *
  * Lighting is one LED for the whole backlight plus one LED per key. The
  * whole backlight runs hardware effects. While a key LED is lit, the driver
@@ -13,10 +15,12 @@
 
 #include <linux/fixp-arith.h>
 #include <linux/hid.h>
+#include <linux/input.h>
 #include <linux/led-class-multicolor.h>
 #include <linux/leds.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/reboot.h>
 #include <linux/usb.h>
 #include <linux/workqueue.h>
 
@@ -31,6 +35,7 @@
 #define RKBD_ROW_SIZE (3 * RKBD_COLS)
 
 #define RKBD_FRAME_MS 40
+#define RKBD_BRIGHTNESS_STEP 32
 
 enum {
 	STATUS_BUSY = 0x01,
@@ -44,7 +49,12 @@ enum {
 #define TID_MATRIX 0x3f
 
 #define CLASS_DEVICE 0x00
+#define CMD_DEVICE_MODE 0x04
 #define CMD_FIRMWARE 0x81
+
+/* Mode 0x01 is the bootloader, which erases the firmware on entry. */
+#define MODE_NORMAL 0x00
+#define MODE_DRIVER 0x03
 
 #define CLASS_LED 0x03
 #define CMD_BRIGHTNESS 0x03
@@ -64,6 +74,11 @@ enum {
 	EFFECT_STATIC = 0x06,
 	EFFECT_STARLIGHT = 0x19,
 };
+
+#define REPORT_VENDOR_KEYS 0x04
+#define VENDOR_FN 0x01
+#define VENDOR_M1 0x20
+#define VENDOR_M_KEYS 5
 
 #define RKBD_EFFECT_DIRECTION BIT(0)
 /* The driver can draw the effect itself, under lit keys. */
@@ -93,6 +108,25 @@ struct rkbd_key {
 
 #define RKBD_KEYS ARRAY_SIZE(rkbd_keys)
 
+/* Keys with Fn held. Brightness keys have no code, the driver handles them. */
+struct rkbd_fn_key {
+	u16 code;
+	u16 fn_code;
+	int brightness;
+};
+
+static const struct rkbd_fn_key rkbd_fn_keys[] = {
+	{ KEY_F1, KEY_MUTE },
+	{ KEY_F2, KEY_VOLUMEDOWN },
+	{ KEY_F3, KEY_VOLUMEUP },
+	{ KEY_F5, KEY_PREVIOUSSONG },
+	{ KEY_F6, KEY_PLAYPAUSE },
+	{ KEY_F7, KEY_NEXTSONG },
+	{ KEY_F11, 0, -RKBD_BRIGHTNESS_STEP },
+	{ KEY_F12, 0, RKBD_BRIGHTNESS_STEP },
+	{ KEY_PAUSE, KEY_SLEEP },
+};
+
 struct rkbd;
 
 struct rkbd_led {
@@ -105,6 +139,8 @@ struct rkbd_led {
 
 struct rkbd {
 	struct hid_device *hdev;
+	struct input_dev *input;
+	struct notifier_block reboot_nb;
 	struct delayed_work animate;
 
 	/* Serializes device I/O and all state below. */
@@ -133,6 +169,11 @@ struct rkbd {
 	u8 shown[RKBD_ROWS][RKBD_ROW_SIZE];
 
 	struct rkbd_led keys[RKBD_KEYS];
+
+	/* Input state, only touched from the HID event path. */
+	bool fn;
+	u8 m_keys;
+	unsigned long fn_pressed;
 };
 
 static int rkbd_cmd(struct rkbd *kb, u8 tid, u8 class, u8 cmd, const u8 *args,
@@ -191,6 +232,16 @@ static int rkbd_cmd(struct rkbd *kb, u8 tid, u8 class, u8 cmd, const u8 *args,
 	if (resp)
 		memcpy(resp, report + 8, RKBD_ARGS_MAX);
 	return 0;
+}
+
+static int rkbd_set_mode(struct rkbd *kb, u8 mode)
+{
+	u8 args[] = { mode, 0x00 };
+
+	if (WARN_ON(mode != MODE_NORMAL && mode != MODE_DRIVER))
+		return -EINVAL;
+	return rkbd_cmd(kb, TID_MATRIX, CLASS_DEVICE, CMD_DEVICE_MODE, args,
+			sizeof(args), NULL);
 }
 
 static int rkbd_set_brightness(struct rkbd *kb, u8 brightness)
@@ -647,7 +698,7 @@ static int rkbd_leds_register(struct rkbd *kb)
 	return ret;
 }
 
-/* Turns the backlight off and stops all device I/O. */
+/* Hands the keyboard back with the backlight off and Fn in its firmware. */
 static void rkbd_release(struct rkbd *kb)
 {
 	int ret;
@@ -657,9 +708,124 @@ static void rkbd_release(struct rkbd *kb)
 		return;
 	kb->stopped = true;
 	ret = rkbd_set_brightness(kb, 0);
+	if (!ret)
+		ret = rkbd_set_mode(kb, MODE_NORMAL);
 	if (ret && ret != -ENODEV)
-		hid_warn(kb->hdev, "failed to turn the backlight off: %d\n",
+		hid_warn(kb->hdev, "failed to hand back the keyboard: %d\n",
 			 ret);
+}
+
+static int rkbd_reboot_notify(struct notifier_block *nb, unsigned long action,
+			      void *data)
+{
+	struct rkbd *kb = container_of(nb, struct rkbd, reboot_nb);
+
+	/* The firmware setup and the boot menu only read keys in normal mode. */
+	rkbd_release(kb);
+	cancel_delayed_work_sync(&kb->animate);
+	return NOTIFY_DONE;
+}
+
+static const struct rkbd_fn_key *rkbd_fn_key(u16 code, unsigned int *index)
+{
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(rkbd_fn_keys); i++) {
+		if (rkbd_fn_keys[i].code == code) {
+			*index = i;
+			return &rkbd_fn_keys[i];
+		}
+	}
+	return NULL;
+}
+
+static void rkbd_step_brightness(struct rkbd *kb, int step)
+{
+	struct led_classdev *cdev = &kb->backlight.mc.led_cdev;
+	int brightness = clamp_t(int, cdev->brightness + step, 0, LED_FULL);
+
+	/* Safe here, the LED core defers the blocking write to a worker. */
+	led_set_brightness(cdev, brightness);
+}
+
+static int rkbd_event(struct hid_device *hdev, struct hid_field *field,
+		      struct hid_usage *usage, __s32 value)
+{
+	struct rkbd *kb = hid_get_drvdata(hdev);
+	const struct rkbd_fn_key *key;
+	unsigned int index;
+
+	if (!kb || usage->type != EV_KEY)
+		return 0;
+
+	key = rkbd_fn_key(usage->code, &index);
+	if (!key)
+		return 0;
+
+	/* A key pressed with Fn is released as the Fn key, even without Fn. */
+	if (!kb->fn && !test_bit(index, &kb->fn_pressed))
+		return 0;
+	if (value)
+		set_bit(index, &kb->fn_pressed);
+	else
+		clear_bit(index, &kb->fn_pressed);
+
+	if (key->fn_code)
+		input_event(field->hidinput->input, EV_KEY, key->fn_code,
+			    value);
+	else if (value == 1)
+		rkbd_step_brightness(kb, key->brightness);
+	return 1;
+}
+
+static int rkbd_raw_event(struct hid_device *hdev, struct hid_report *report,
+			  u8 *data, int size)
+{
+	struct rkbd *kb = hid_get_drvdata(hdev);
+	u8 m_keys = 0, changed;
+	bool fn = false;
+	int i;
+
+	if (!kb || size < 2 || data[0] != REPORT_VENDOR_KEYS)
+		return 0;
+
+	for (i = 1; i < size; i++) {
+		if (data[i] == VENDOR_FN)
+			fn = true;
+		else if (data[i] >= VENDOR_M1 &&
+			 data[i] < VENDOR_M1 + VENDOR_M_KEYS)
+			m_keys |= BIT(data[i] - VENDOR_M1);
+	}
+	kb->fn = fn;
+
+	changed = m_keys ^ kb->m_keys;
+	kb->m_keys = m_keys;
+	if (kb->input && changed) {
+		for (i = 0; i < VENDOR_M_KEYS; i++)
+			if (changed & BIT(i))
+				input_report_key(kb->input, KEY_MACRO1 + i,
+						 m_keys & BIT(i));
+		input_sync(kb->input);
+	}
+	return 1;
+}
+
+static int rkbd_input_configured(struct hid_device *hdev, struct hid_input *hi)
+{
+	struct rkbd *kb = hid_get_drvdata(hdev);
+	unsigned int i;
+
+	if (!kb || kb->input)
+		return 0;
+
+	kb->input = hi->input;
+	__set_bit(EV_KEY, hi->input->evbit);
+	for (i = 0; i < VENDOR_M_KEYS; i++)
+		__set_bit(KEY_MACRO1 + i, hi->input->keybit);
+	for (i = 0; i < ARRAY_SIZE(rkbd_fn_keys); i++)
+		if (rkbd_fn_keys[i].fn_code)
+			__set_bit(rkbd_fn_keys[i].fn_code, hi->input->keybit);
+	return 0;
 }
 
 static bool rkbd_is_control(struct hid_device *hdev)
@@ -712,6 +878,8 @@ static int rkbd_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		ret = rkbd_cmd(kb, TID_DEFAULT, CLASS_DEVICE, CMD_FIRMWARE,
 			       NULL, 2, version);
 		if (!ret)
+			ret = rkbd_set_mode(kb, MODE_DRIVER);
+		if (!ret)
 			rkbd_update(kb);
 	}
 	if (ret) {
@@ -723,8 +891,15 @@ static int rkbd_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	ret = rkbd_leds_register(kb);
 	if (ret)
 		goto out_release;
+
+	kb->reboot_nb.notifier_call = rkbd_reboot_notify;
+	ret = register_reboot_notifier(&kb->reboot_nb);
+	if (ret)
+		goto out_leds;
 	return 0;
 
+out_leds:
+	rkbd_leds_unregister(kb);
 out_release:
 	rkbd_release(kb);
 	cancel_delayed_work_sync(&kb->animate);
@@ -740,6 +915,7 @@ static void rkbd_remove(struct hid_device *hdev)
 	struct rkbd *kb = hid_get_drvdata(hdev);
 
 	if (kb) {
+		unregister_reboot_notifier(&kb->reboot_nb);
 		rkbd_release(kb);
 		cancel_delayed_work_sync(&kb->animate);
 		rkbd_leds_unregister(kb);
@@ -773,6 +949,9 @@ static int __maybe_unused rkbd_resume(struct hid_device *hdev)
 		kb->effect_valid = false;
 		kb->custom = false;
 		kb->shown_valid = false;
+		/* A reset puts the keyboard back in normal mode. */
+		if (rkbd_set_mode(kb, MODE_DRIVER))
+			hid_warn(hdev, "failed to enter driver mode\n");
 		rkbd_update(kb);
 	}
 	return 0;
@@ -789,6 +968,9 @@ static struct hid_driver rkbd_driver = {
 	.id_table = rkbd_table,
 	.probe = rkbd_probe,
 	.remove = rkbd_remove,
+	.event = rkbd_event,
+	.raw_event = rkbd_raw_event,
+	.input_configured = rkbd_input_configured,
 #ifdef CONFIG_PM
 	.suspend = rkbd_suspend,
 	.resume = rkbd_resume,
@@ -827,5 +1009,5 @@ static void __exit rkbd_exit(void)
 module_init(rkbd_init);
 module_exit(rkbd_exit);
 
-MODULE_DESCRIPTION("Razer BlackWidow Chroma V2 backlight driver");
+MODULE_DESCRIPTION("Razer BlackWidow Chroma V2 driver");
 MODULE_LICENSE("GPL");
