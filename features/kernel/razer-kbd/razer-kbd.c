@@ -1,0 +1,534 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+/*
+ * Backlight of the Razer BlackWidow Chroma V2 (1532:0221).
+ *
+ * The keyboard takes 90 byte feature reports on interface 1, the layout
+ * openrazer documents. The driver only sets the effect and a brightness that
+ * is not stored, so the stored brightness in the keyboard stays untouched.
+ * Key input is handled like hid-generic does.
+ */
+
+#include <linux/hid.h>
+#include <linux/led-class-multicolor.h>
+#include <linux/leds.h>
+#include <linux/module.h>
+#include <linux/mutex.h>
+#include <linux/usb.h>
+
+#define RKBD_CONTROL_INTERFACE 1
+
+#define RKBD_REPORT_SIZE 90
+#define RKBD_ARGS_MAX 80
+#define RKBD_RETRIES 10
+
+enum {
+	STATUS_BUSY = 0x01,
+	STATUS_OK = 0x02,
+	STATUS_FAILED = 0x03,
+	STATUS_TIMEOUT = 0x04,
+	STATUS_UNSUPPORTED = 0x05,
+};
+
+#define TID_DEFAULT 0xff
+#define TID_MATRIX 0x3f
+
+#define CLASS_DEVICE 0x00
+#define CMD_FIRMWARE 0x81
+
+#define CLASS_LED 0x03
+#define CMD_BRIGHTNESS 0x03
+#define CMD_MATRIX_EFFECT 0x0a
+
+#define NOSTORE 0x00
+#define BACKLIGHT_LED 0x05
+
+enum {
+	EFFECT_WAVE = 0x01,
+	EFFECT_REACTIVE = 0x02,
+	EFFECT_BREATHING = 0x03,
+	EFFECT_SPECTRUM = 0x04,
+	EFFECT_STATIC = 0x06,
+	EFFECT_STARLIGHT = 0x19,
+};
+
+#define RKBD_EFFECT_DIRECTION BIT(0)
+
+struct rkbd_effect {
+	struct led_trigger trigger;
+	u8 id;
+	u8 flags;
+	/* Number of speed steps, 0 if the effect has no speed. */
+	u8 speeds;
+};
+
+struct rkbd {
+	struct hid_device *hdev;
+	/* Serializes device I/O and all state below. */
+	struct mutex lock;
+	u8 *buf;
+
+	struct led_classdev_mc mc;
+	struct mc_subled subleds[3];
+	const struct rkbd_effect *effect;
+	u8 speed;
+	bool reverse;
+	bool suspended;
+
+	/* The effect the keyboard runs, to not restart it on brightness changes. */
+	bool effect_valid;
+	u8 effect_args[RKBD_ARGS_MAX];
+	u8 effect_len;
+};
+
+static int rkbd_cmd(struct rkbd *kb, u8 tid, u8 class, u8 cmd, const u8 *args,
+		    u8 len, u8 *resp)
+{
+	u8 *report = kb->buf + 1;
+	u8 crc = 0;
+	int i, ret;
+
+	lockdep_assert_held(&kb->lock);
+
+	if (len > RKBD_ARGS_MAX)
+		return -EINVAL;
+
+	memset(kb->buf, 0, RKBD_REPORT_SIZE + 1);
+	report[1] = tid;
+	report[5] = len;
+	report[6] = class;
+	report[7] = cmd;
+	if (args)
+		memcpy(report + 8, args, len);
+	for (i = 2; i < 88; i++)
+		crc ^= report[i];
+	report[88] = crc;
+
+	ret = hid_hw_raw_request(kb->hdev, 0, kb->buf, RKBD_REPORT_SIZE + 1,
+				 HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
+	if (ret < 0)
+		return ret;
+
+	for (i = 0; i < RKBD_RETRIES; i++) {
+		usleep_range(600, 800);
+		ret = hid_hw_raw_request(kb->hdev, 0, kb->buf,
+					 RKBD_REPORT_SIZE + 1,
+					 HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
+		if (ret < 0)
+			return ret;
+		if (report[0] != STATUS_BUSY)
+			break;
+	}
+
+	switch (report[0]) {
+	case STATUS_OK:
+		break;
+	case STATUS_BUSY:
+	case STATUS_TIMEOUT:
+		return -ETIMEDOUT;
+	case STATUS_UNSUPPORTED:
+		return -EOPNOTSUPP;
+	default:
+		return -EIO;
+	}
+	if (report[6] != class || report[7] != cmd)
+		return -EPROTO;
+
+	if (resp)
+		memcpy(resp, report + 8, RKBD_ARGS_MAX);
+	return 0;
+}
+
+static int rkbd_set_brightness(struct rkbd *kb, u8 brightness)
+{
+	u8 args[] = { NOSTORE, BACKLIGHT_LED, brightness };
+
+	return rkbd_cmd(kb, TID_DEFAULT, CLASS_LED, CMD_BRIGHTNESS, args,
+			sizeof(args), NULL);
+}
+
+/* Builds the matrix effect command for the current state, returns its length. */
+static u8 rkbd_effect_args(struct rkbd *kb, u8 *args)
+{
+	const struct rkbd_effect *effect = kb->effect;
+	u8 rgb[3];
+	int i;
+
+	for (i = 0; i < 3; i++)
+		rgb[i] = kb->subleds[i].intensity;
+
+	if (!effect) {
+		args[0] = EFFECT_STATIC;
+		memcpy(args + 1, rgb, 3);
+		return 4;
+	}
+
+	args[0] = effect->id;
+	switch (effect->id) {
+	case EFFECT_WAVE:
+		args[1] = kb->reverse ? 2 : 1;
+		return 2;
+	case EFFECT_REACTIVE:
+		/* The afterglow time, 1 is the shortest. */
+		args[1] = effect->speeds - kb->speed;
+		memcpy(args + 2, rgb, 3);
+		return 5;
+	case EFFECT_BREATHING:
+		/* One color. */
+		args[1] = 0x01;
+		memcpy(args + 2, rgb, 3);
+		return 8;
+	case EFFECT_STARLIGHT:
+		args[1] = 0x01;
+		args[2] = effect->speeds - kb->speed;
+		memcpy(args + 3, rgb, 3);
+		return 9;
+	default:
+		return 1;
+	}
+}
+
+static int rkbd_apply(struct rkbd *kb, unsigned int brightness)
+{
+	u8 args[RKBD_ARGS_MAX] = { };
+	u8 len;
+	int ret;
+
+	lockdep_assert_held(&kb->lock);
+
+	if (kb->suspended)
+		return 0;
+
+	if (brightness) {
+		len = rkbd_effect_args(kb, args);
+		if (!kb->effect_valid || len != kb->effect_len ||
+		    memcmp(args, kb->effect_args, len)) {
+			kb->effect_valid = false;
+			ret = rkbd_cmd(kb, TID_MATRIX, CLASS_LED,
+				       CMD_MATRIX_EFFECT, args, len, NULL);
+			if (ret)
+				goto err;
+			memcpy(kb->effect_args, args, len);
+			kb->effect_len = len;
+			kb->effect_valid = true;
+		}
+	}
+
+	ret = rkbd_set_brightness(kb, brightness);
+	if (!ret)
+		return 0;
+err:
+	hid_err(kb->hdev, "failed to set the backlight: %d\n", ret);
+	return ret;
+}
+
+static struct rkbd *to_rkbd(struct led_classdev *cdev)
+{
+	return container_of(lcdev_to_mccdev(cdev), struct rkbd, mc);
+}
+
+static int rkbd_brightness_set(struct led_classdev *cdev,
+			       enum led_brightness brightness)
+{
+	struct rkbd *kb = to_rkbd(cdev);
+
+	guard(mutex)(&kb->lock);
+	return rkbd_apply(kb, brightness);
+}
+
+static int rkbd_trigger_activate(struct led_classdev *cdev)
+{
+	struct rkbd *kb = to_rkbd(cdev);
+	int ret;
+
+	guard(mutex)(&kb->lock);
+	kb->effect = container_of(cdev->trigger, struct rkbd_effect, trigger);
+	if (kb->effect->speeds)
+		kb->speed = min_t(u8, kb->speed, kb->effect->speeds - 1);
+	if (!cdev->brightness)
+		cdev->brightness = cdev->max_brightness;
+	ret = rkbd_apply(kb, cdev->brightness);
+	/* The LED core does not call deactivate after a failed activate. */
+	if (ret)
+		kb->effect = NULL;
+	return ret;
+}
+
+/* The LED core turns the LED off after this, which writes the hardware. */
+static void rkbd_trigger_deactivate(struct led_classdev *cdev)
+{
+	struct rkbd *kb = to_rkbd(cdev);
+
+	guard(mutex)(&kb->lock);
+	kb->effect = NULL;
+}
+
+static ssize_t speed_show(struct device *dev, struct device_attribute *attr,
+			  char *buf)
+{
+	struct rkbd *kb = to_rkbd(led_trigger_get_led(dev));
+
+	return sysfs_emit(buf, "%u\n", kb->speed);
+}
+
+static ssize_t speed_store(struct device *dev, struct device_attribute *attr,
+			   const char *buf, size_t count)
+{
+	struct rkbd *kb = to_rkbd(led_trigger_get_led(dev));
+	u8 speed;
+	int ret;
+
+	ret = kstrtou8(buf, 10, &speed);
+	if (ret)
+		return ret;
+
+	guard(mutex)(&kb->lock);
+	if (!kb->effect || speed >= kb->effect->speeds)
+		return -EINVAL;
+	kb->speed = speed;
+	ret = rkbd_apply(kb, kb->mc.led_cdev.brightness);
+	return ret ?: count;
+}
+static DEVICE_ATTR_RW(speed);
+
+static ssize_t direction_show(struct device *dev,
+			      struct device_attribute *attr, char *buf)
+{
+	struct rkbd *kb = to_rkbd(led_trigger_get_led(dev));
+
+	return sysfs_emit(buf, "%s\n", kb->reverse ? "reverse" : "forward");
+}
+
+static ssize_t direction_store(struct device *dev,
+			       struct device_attribute *attr, const char *buf,
+			       size_t count)
+{
+	struct rkbd *kb = to_rkbd(led_trigger_get_led(dev));
+	bool reverse;
+	int ret;
+
+	if (sysfs_streq(buf, "forward"))
+		reverse = false;
+	else if (sysfs_streq(buf, "reverse"))
+		reverse = true;
+	else
+		return -EINVAL;
+
+	guard(mutex)(&kb->lock);
+	kb->reverse = reverse;
+	ret = rkbd_apply(kb, kb->mc.led_cdev.brightness);
+	return ret ?: count;
+}
+static DEVICE_ATTR_RW(direction);
+
+static struct attribute *rkbd_speed_attrs[] = {
+	&dev_attr_speed.attr,
+	NULL
+};
+ATTRIBUTE_GROUPS(rkbd_speed);
+
+static struct attribute *rkbd_direction_attrs[] = {
+	&dev_attr_direction.attr,
+	NULL
+};
+ATTRIBUTE_GROUPS(rkbd_direction);
+
+static struct led_hw_trigger_type rkbd_trigger_type;
+
+#define RKBD_EFFECT(_name, _id, _flags, _speeds) {			\
+	.trigger = {							\
+		.name = _name,						\
+		.activate = rkbd_trigger_activate,			\
+		.deactivate = rkbd_trigger_deactivate,			\
+		.trigger_type = &rkbd_trigger_type,			\
+		.groups = (_flags) & RKBD_EFFECT_DIRECTION ?		\
+			  rkbd_direction_groups :			\
+			  (_speeds) ? rkbd_speed_groups : NULL,		\
+	},								\
+	.id = _id,							\
+	.flags = _flags,						\
+	.speeds = _speeds,						\
+}
+
+static struct rkbd_effect rkbd_effects[] = {
+	RKBD_EFFECT("breathing", EFFECT_BREATHING, 0, 0),
+	RKBD_EFFECT("spectrum-cycle", EFFECT_SPECTRUM, 0, 0),
+	RKBD_EFFECT("rainbow", EFFECT_WAVE, RKBD_EFFECT_DIRECTION, 0),
+	RKBD_EFFECT("reactive", EFFECT_REACTIVE, 0, 4),
+	RKBD_EFFECT("starlight", EFFECT_STARLIGHT, 0, 3),
+};
+
+static bool rkbd_is_control(struct hid_device *hdev)
+{
+	struct usb_interface *intf;
+
+	if (!hid_is_usb(hdev))
+		return false;
+	intf = to_usb_interface(hdev->dev.parent);
+	return intf->cur_altsetting->desc.bInterfaceNumber ==
+	       RKBD_CONTROL_INTERFACE;
+}
+
+static int rkbd_probe(struct hid_device *hdev, const struct hid_device_id *id)
+{
+	struct device *dev = &hdev->dev;
+	struct led_classdev *cdev;
+	u8 version[RKBD_ARGS_MAX];
+	struct rkbd *kb;
+	int i, ret;
+
+	ret = hid_parse(hdev);
+	if (ret)
+		return ret;
+
+	if (!rkbd_is_control(hdev))
+		return hid_hw_start(hdev, HID_CONNECT_DEFAULT);
+
+	kb = devm_kzalloc(dev, sizeof(*kb), GFP_KERNEL);
+	if (!kb)
+		return -ENOMEM;
+
+	kb->buf = devm_kzalloc(dev, RKBD_REPORT_SIZE + 1, GFP_KERNEL);
+	if (!kb->buf)
+		return -ENOMEM;
+
+	ret = devm_mutex_init(dev, &kb->lock);
+	if (ret)
+		return ret;
+
+	kb->hdev = hdev;
+	for (i = 0; i < 3; i++) {
+		kb->subleds[i].channel = i;
+		kb->subleds[i].intensity = LED_FULL;
+	}
+	kb->subleds[0].color_index = LED_COLOR_ID_RED;
+	kb->subleds[1].color_index = LED_COLOR_ID_GREEN;
+	kb->subleds[2].color_index = LED_COLOR_ID_BLUE;
+	kb->mc.subled_info = kb->subleds;
+	kb->mc.num_colors = 3;
+
+	cdev = &kb->mc.led_cdev;
+	cdev->name = devm_kasprintf(dev, GFP_KERNEL, "%s:rgb:kbd_backlight",
+				    dev_name(dev));
+	if (!cdev->name)
+		return -ENOMEM;
+	cdev->max_brightness = LED_FULL;
+	cdev->brightness_set_blocking = rkbd_brightness_set;
+	cdev->trigger_type = &rkbd_trigger_type;
+	cdev->flags = LED_HW_PLUGGABLE;
+
+	/* No hidraw, userspace commands would interleave with the driver's. */
+	ret = hid_hw_start(hdev, HID_CONNECT_DEFAULT & ~HID_CONNECT_HIDRAW);
+	if (ret)
+		return ret;
+
+	scoped_guard(mutex, &kb->lock) {
+		ret = rkbd_cmd(kb, TID_DEFAULT, CLASS_DEVICE, CMD_FIRMWARE,
+			       NULL, 2, version);
+		if (!ret)
+			rkbd_apply(kb, LED_OFF);
+	}
+	if (ret) {
+		hid_err(hdev, "no reply from the keyboard: %d\n", ret);
+		goto out_stop;
+	}
+	hid_info(hdev, "firmware %u.%u\n", version[0], version[1]);
+
+	hid_set_drvdata(hdev, kb);
+	ret = led_classdev_multicolor_register(dev, &kb->mc);
+	if (ret)
+		goto out_stop;
+	return 0;
+
+out_stop:
+	hid_set_drvdata(hdev, NULL);
+	hid_hw_stop(hdev);
+	return ret;
+}
+
+static void rkbd_remove(struct hid_device *hdev)
+{
+	struct rkbd *kb = hid_get_drvdata(hdev);
+
+	/* Before the stop, the LED core turns the backlight off. */
+	if (kb)
+		led_classdev_multicolor_unregister(&kb->mc);
+	hid_hw_stop(hdev);
+}
+
+static int __maybe_unused rkbd_suspend(struct hid_device *hdev,
+				       pm_message_t message)
+{
+	struct rkbd *kb = hid_get_drvdata(hdev);
+
+	if (kb) {
+		guard(mutex)(&kb->lock);
+		kb->suspended = true;
+	}
+	return 0;
+}
+
+/* A failed write must not fail the resume. */
+static int __maybe_unused rkbd_resume(struct hid_device *hdev)
+{
+	struct rkbd *kb = hid_get_drvdata(hdev);
+
+	if (kb) {
+		guard(mutex)(&kb->lock);
+		kb->suspended = false;
+		kb->effect_valid = false;
+		rkbd_apply(kb, kb->mc.led_cdev.brightness);
+	}
+	return 0;
+}
+
+static const struct hid_device_id rkbd_table[] = {
+	{ HID_USB_DEVICE(0x1532, 0x0221) }, /* BlackWidow Chroma V2 */
+	{ }
+};
+MODULE_DEVICE_TABLE(hid, rkbd_table);
+
+static struct hid_driver rkbd_driver = {
+	.name = "razer-kbd",
+	.id_table = rkbd_table,
+	.probe = rkbd_probe,
+	.remove = rkbd_remove,
+#ifdef CONFIG_PM
+	.suspend = rkbd_suspend,
+	.resume = rkbd_resume,
+	.reset_resume = rkbd_resume,
+#endif
+};
+
+static int __init rkbd_init(void)
+{
+	int i, ret;
+
+	for (i = 0; i < ARRAY_SIZE(rkbd_effects); i++) {
+		ret = led_trigger_register(&rkbd_effects[i].trigger);
+		if (ret)
+			goto err;
+	}
+
+	ret = hid_register_driver(&rkbd_driver);
+	if (!ret)
+		return 0;
+err:
+	while (i--)
+		led_trigger_unregister(&rkbd_effects[i].trigger);
+	return ret;
+}
+
+static void __exit rkbd_exit(void)
+{
+	int i;
+
+	hid_unregister_driver(&rkbd_driver);
+	for (i = 0; i < ARRAY_SIZE(rkbd_effects); i++)
+		led_trigger_unregister(&rkbd_effects[i].trigger);
+}
+
+module_init(rkbd_init);
+module_exit(rkbd_exit);
+
+MODULE_DESCRIPTION("Razer BlackWidow Chroma V2 backlight driver");
+MODULE_LICENSE("GPL");
