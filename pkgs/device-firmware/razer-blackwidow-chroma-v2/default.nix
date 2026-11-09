@@ -18,7 +18,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   version = "1.01.00";
 
   src = fetchurl {
-    url = "https://dl.razerzone.com/drivers/BlackWidow%20Chroma%20V2/win/BlackWidow%20Chroma%20V2_FirmwareUpdater_v${finalAttrs.version}_r2.exe";
+    url = "https://dl.razerzone.com/drivers/BlackWidow%20Chroma%20V2/win/BlackWidow%20Chroma%20V2_FirmwareUpdater_v1.01.00_r2.exe";
     hash = "sha256-nI5GjmUxViowHYSfDm28hgnSdJwv14Qp7y8j1o5ZGHE=";
   };
 

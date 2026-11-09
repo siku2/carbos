@@ -44,10 +44,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     deviceVersion =
       let
         parts = lib.splitString "." finalAttrs.version;
+        pad = width: lib.fixedWidthString width "0";
       in
-      "MPM${lib.elemAt parts 0}.${lib.elemAt parts 1}_B${
-        lib.fixedWidthString 4 "0" (lib.elemAt parts 2)
-      }";
+      "MPM${pad 2 (lib.elemAt parts 0)}.${pad 2 (lib.elemAt parts 1)}_B${pad 4 (lib.elemAt parts 2)}";
 
     updateScript = writeShellApplication {
       name = "logitech-g903-firmware-update";
