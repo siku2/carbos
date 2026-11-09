@@ -38,6 +38,7 @@ _: {
     drivers.nzxtSmart2.enable = true;
     drivers.corsairCcore.enable = true;
     drivers.razerKbd.enable = true;
+    drivers.logitechHidpp.enable = true;
   };
 
   hardware = {

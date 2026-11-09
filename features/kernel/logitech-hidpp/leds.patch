@@ -1,0 +1,466 @@
+--- a/drivers/hid/hid-logitech-hidpp.c
++++ b/drivers/hid/hid-logitech-hidpp.c
+@@ -19,6 +19,8 @@
+ #include <linux/sched.h>
+ #include <linux/sched/clock.h>
+ #include <linux/kfifo.h>
++#include <linux/led-class-multicolor.h>
++#include <linux/leds.h>
+ #include <linux/input/mt.h>
+ #include <linux/workqueue.h>
+ #include <linux/atomic.h>
+@@ -215,6 +217,11 @@
+ 	u8 hires_wheel_feature_index;
+ 
+ 	bool connected_once;
++
++	struct hidpp_leds *leds;
++	/* Serializes LED state and the end of LED writes at remove. */
++	struct mutex led_lock;
++	bool leds_stopped;
+ };
+ 
+ /* HID++ 1.0 error codes */
+@@ -2094,6 +2101,386 @@
+ }
+ 
+ /* -------------------------------------------------------------------------- */
++/* 0x8070: Color LED Effects                                                  */
++/* -------------------------------------------------------------------------- */
++
++#define HIDPP_PAGE_COLOR_LED_EFFECTS			0x8070
++
++#define CMD_COLOR_LED_EFFECTS_GET_INFO			0x00
++#define CMD_COLOR_LED_EFFECTS_GET_ZONE_INFO		0x10
++#define CMD_COLOR_LED_EFFECTS_GET_ZONE_EFFECT_INFO	0x20
++#define CMD_COLOR_LED_EFFECTS_SET_ZONE_EFFECT		0x30
++
++#define HIDPP_LED_NO_EFFECT		0xff
++#define HIDPP_LED_PERIOD_DEFAULT	5000
++
++enum hidpp_led_mode {
++	HIDPP_LED_OFF,
++	HIDPP_LED_FIXED,
++	HIDPP_LED_CYCLE,
++	HIDPP_LED_BREATHING,
++	HIDPP_LED_MODES,
++};
++
++static const u16 hidpp_led_effect_ids[HIDPP_LED_MODES] = {
++	[HIDPP_LED_OFF] = 0x0000,
++	[HIDPP_LED_FIXED] = 0x0001,
++	[HIDPP_LED_CYCLE] = 0x0003,
++	[HIDPP_LED_BREATHING] = 0x000a,
++};
++
++static const char *const hidpp_led_locations[] = {
++	[1] = "primary",
++	[2] = "logo",
++	[3] = "left",
++	[4] = "right",
++	[5] = "combined",
++	[6] = "primary-1",
++	[7] = "primary-2",
++	[8] = "primary-3",
++	[9] = "primary-4",
++	[10] = "primary-5",
++	[11] = "primary-6",
++};
++
++struct hidpp_led {
++	struct led_classdev_mc mc;
++	struct mc_subled subleds[3];
++	struct hidpp_device *hidpp;
++	u8 zone;
++	/* Effect index of each mode in this zone. */
++	u8 effects[HIDPP_LED_MODES];
++	enum hidpp_led_mode mode;
++	u16 period[HIDPP_LED_MODES];
++	/* The effect can't be read back, so only reapply what was set. */
++	bool set;
++	bool registered;
++};
++
++struct hidpp_leds {
++	u8 feature_index;
++	unsigned int count;
++	struct hidpp_led zones[] __counted_by(count);
++};
++
++struct hidpp_led_effect {
++	struct led_trigger trigger;
++	enum hidpp_led_mode mode;
++};
++
++static struct hidpp_led *to_hidpp_led(struct led_classdev *cdev)
++{
++	return container_of(lcdev_to_mccdev(cdev), struct hidpp_led, mc);
++}
++
++static int hidpp_led_write(struct hidpp_led *led)
++{
++	struct hidpp_device *hidpp = led->hidpp;
++	struct led_classdev *cdev = &led->mc.led_cdev;
++	enum hidpp_led_mode mode = cdev->brightness ? led->mode : HIDPP_LED_OFF;
++	u8 intensity = DIV_ROUND_UP(cdev->brightness * 100,
++				    cdev->max_brightness);
++	struct hidpp_report response;
++	/* The last byte 0 writes RAM only. Flash keeps the onboard profile. */
++	u8 params[13] = { led->zone, led->effects[mode] };
++	u8 *effect = params + 2;
++	int i, ret;
++
++	lockdep_assert_held(&hidpp->led_lock);
++
++	/* Unregistering turns the LED off. The device keeps its effect. */
++	if (hidpp->leds_stopped)
++		return 0;
++
++	switch (mode) {
++	case HIDPP_LED_FIXED:
++		led_mc_calc_color_components(&led->mc, cdev->brightness);
++		for (i = 0; i < 3; i++)
++			effect[i] = led->subleds[i].brightness;
++		break;
++	case HIDPP_LED_CYCLE:
++		put_unaligned_be16(led->period[mode], effect + 5);
++		effect[7] = intensity;
++		break;
++	case HIDPP_LED_BREATHING:
++		for (i = 0; i < 3; i++)
++			effect[i] = led->subleds[i].intensity;
++		put_unaligned_be16(led->period[mode], effect + 3);
++		effect[6] = intensity;
++		break;
++	default:
++		break;
++	}
++
++	ret = hidpp_send_fap_command_sync(hidpp, hidpp->leds->feature_index,
++					  CMD_COLOR_LED_EFFECTS_SET_ZONE_EFFECT,
++					  params, sizeof(params), &response);
++	/* A receiver answers for a device that is not connected. */
++	if (ret > 0 && response.report_id == REPORT_ID_HIDPP_SHORT &&
++	    response.rap.sub_id == HIDPP_ERROR)
++		return 0;
++	return ret > 0 ? -EIO : ret;
++}
++
++static int hidpp_led_brightness_set(struct led_classdev *cdev,
++				    enum led_brightness brightness)
++{
++	struct hidpp_led *led = to_hidpp_led(cdev);
++
++	guard(mutex)(&led->hidpp->led_lock);
++	led->set = true;
++	return hidpp_led_write(led);
++}
++
++static int hidpp_led_trigger_activate(struct led_classdev *cdev)
++{
++	struct hidpp_led *led = to_hidpp_led(cdev);
++	struct hidpp_led_effect *effect =
++		container_of(cdev->trigger, struct hidpp_led_effect, trigger);
++	int ret;
++
++	if (led->effects[effect->mode] == HIDPP_LED_NO_EFFECT)
++		return -EOPNOTSUPP;
++
++	guard(mutex)(&led->hidpp->led_lock);
++	led->mode = effect->mode;
++	led->set = true;
++	if (!cdev->brightness)
++		cdev->brightness = cdev->max_brightness;
++	ret = hidpp_led_write(led);
++	/* The LED core does not call deactivate after a failed activate. */
++	if (ret)
++		led->mode = HIDPP_LED_FIXED;
++	return ret;
++}
++
++/* The LED core turns the LED off after this, which writes the device. */
++static void hidpp_led_trigger_deactivate(struct led_classdev *cdev)
++{
++	struct hidpp_led *led = to_hidpp_led(cdev);
++
++	guard(mutex)(&led->hidpp->led_lock);
++	led->mode = HIDPP_LED_FIXED;
++}
++
++static ssize_t period_show(struct device *dev, struct device_attribute *attr,
++			   char *buf)
++{
++	struct hidpp_led *led = to_hidpp_led(led_trigger_get_led(dev));
++
++	guard(mutex)(&led->hidpp->led_lock);
++	return sysfs_emit(buf, "%u\n", led->period[led->mode]);
++}
++
++static ssize_t period_store(struct device *dev, struct device_attribute *attr,
++			    const char *buf, size_t count)
++{
++	struct hidpp_led *led = to_hidpp_led(led_trigger_get_led(dev));
++	u16 period;
++	int ret;
++
++	ret = kstrtou16(buf, 10, &period);
++	if (ret)
++		return ret;
++	if (!period)
++		return -EINVAL;
++
++	guard(mutex)(&led->hidpp->led_lock);
++	led->period[led->mode] = period;
++	ret = hidpp_led_write(led);
++	return ret ?: count;
++}
++static DEVICE_ATTR_RW(period);
++
++static struct attribute *hidpp_led_period_attrs[] = {
++	&dev_attr_period.attr,
++	NULL
++};
++ATTRIBUTE_GROUPS(hidpp_led_period);
++
++static struct led_hw_trigger_type hidpp_led_trigger_type;
++
++#define HIDPP_LED_EFFECT(_name, _mode) {				\
++	.trigger = {							\
++		.name = _name,						\
++		.activate = hidpp_led_trigger_activate,			\
++		.deactivate = hidpp_led_trigger_deactivate,		\
++		.trigger_type = &hidpp_led_trigger_type,		\
++		.groups = hidpp_led_period_groups,			\
++	},								\
++	.mode = _mode,							\
++}
++
++static struct hidpp_led_effect hidpp_led_effects[] = {
++	HIDPP_LED_EFFECT("breathing", HIDPP_LED_BREATHING),
++	HIDPP_LED_EFFECT("spectrum-cycle", HIDPP_LED_CYCLE),
++};
++
++static int hidpp_led_init(struct hidpp_device *hidpp, struct hidpp_led *led,
++			  u8 zone)
++{
++	struct device *dev = &hidpp->hid_dev->dev;
++	struct led_classdev *cdev = &led->mc.led_cdev;
++	struct hidpp_report response;
++	u8 params[2] = { zone };
++	const char *location = NULL;
++	u16 id;
++	int i, mode, ret;
++
++	led->hidpp = hidpp;
++	led->zone = zone;
++	led->mode = HIDPP_LED_FIXED;
++	memset(led->effects, HIDPP_LED_NO_EFFECT, sizeof(led->effects));
++
++	ret = hidpp_send_fap_command_sync(hidpp, hidpp->leds->feature_index,
++					  CMD_COLOR_LED_EFFECTS_GET_ZONE_INFO,
++					  params, 1, &response);
++	if (ret)
++		return ret > 0 ? -EIO : ret;
++	id = get_unaligned_be16(response.fap.params + 1);
++	if (id < ARRAY_SIZE(hidpp_led_locations))
++		location = hidpp_led_locations[id];
++
++	for (i = 0; i < response.fap.params[3]; i++) {
++		struct hidpp_report info;
++
++		params[1] = i;
++		ret = hidpp_send_fap_command_sync(hidpp,
++						  hidpp->leds->feature_index,
++						  CMD_COLOR_LED_EFFECTS_GET_ZONE_EFFECT_INFO,
++						  params, 2, &info);
++		if (ret)
++			return ret > 0 ? -EIO : ret;
++		id = get_unaligned_be16(info.fap.params + 2);
++		for (mode = 0; mode < HIDPP_LED_MODES; mode++)
++			if (hidpp_led_effect_ids[mode] == id)
++				led->effects[mode] = i;
++	}
++	if (led->effects[HIDPP_LED_OFF] == HIDPP_LED_NO_EFFECT ||
++	    led->effects[HIDPP_LED_FIXED] == HIDPP_LED_NO_EFFECT)
++		return -ENODEV;
++
++	for (mode = 0; mode < HIDPP_LED_MODES; mode++)
++		led->period[mode] = HIDPP_LED_PERIOD_DEFAULT;
++	for (i = 0; i < 3; i++) {
++		led->subleds[i].color_index = LED_COLOR_ID_RED + i;
++		led->subleds[i].channel = i;
++		led->subleds[i].intensity = LED_FULL;
++	}
++	led->mc.subled_info = led->subleds;
++	led->mc.num_colors = 3;
++
++	if (location)
++		cdev->name = devm_kasprintf(dev, GFP_KERNEL, "%s:rgb:%s",
++					    dev_name(dev), location);
++	else
++		cdev->name = devm_kasprintf(dev, GFP_KERNEL, "%s:rgb:zone-%u",
++					    dev_name(dev), zone);
++	if (!cdev->name)
++		return -ENOMEM;
++	cdev->max_brightness = LED_FULL;
++	cdev->brightness_set_blocking = hidpp_led_brightness_set;
++	cdev->trigger_type = &hidpp_led_trigger_type;
++	cdev->flags = LED_HW_PLUGGABLE | LED_RETAIN_AT_SHUTDOWN;
++
++	ret = led_classdev_multicolor_register(dev, &led->mc);
++	if (!ret)
++		led->registered = true;
++	return ret;
++}
++
++/* Lists the zones on the first connect, reapplies the effects after that. */
++static void hidpp_leds_connect(struct hidpp_device *hidpp)
++{
++	struct device *dev = &hidpp->hid_dev->dev;
++	struct hidpp_leds *leds = hidpp->leds;
++	struct hidpp_report response;
++	u8 feature_index;
++	unsigned int i;
++	int ret;
++
++	if (leds) {
++		guard(mutex)(&hidpp->led_lock);
++		for (i = 0; i < leds->count; i++) {
++			if (!leds->zones[i].set)
++				continue;
++			ret = hidpp_led_write(&leds->zones[i]);
++			if (ret)
++				hid_warn(hidpp->hid_dev,
++					 "failed to restore LED zone %u: %d\n",
++					 i, ret);
++		}
++		return;
++	}
++
++	if (hidpp_root_get_feature(hidpp, HIDPP_PAGE_COLOR_LED_EFFECTS,
++				   &feature_index))
++		return;
++	ret = hidpp_send_fap_command_sync(hidpp, feature_index,
++					  CMD_COLOR_LED_EFFECTS_GET_INFO,
++					  NULL, 0, &response);
++	if (ret || !response.fap.params[0])
++		return;
++
++	leds = devm_kzalloc(dev, struct_size(leds, zones,
++					     response.fap.params[0]),
++			    GFP_KERNEL);
++	if (!leds)
++		return;
++	leds->count = response.fap.params[0];
++	leds->feature_index = feature_index;
++
++	scoped_guard(mutex, &hidpp->led_lock) {
++		if (hidpp->leds_stopped)
++			return;
++		hidpp->leds = leds;
++	}
++
++	for (i = 0; i < leds->count; i++) {
++		ret = hidpp_led_init(hidpp, &leds->zones[i], i);
++		if (ret)
++			hid_warn(hidpp->hid_dev,
++				 "failed to add LED zone %u: %d\n", i, ret);
++	}
++}
++
++static void hidpp_leds_remove(struct hidpp_device *hidpp)
++{
++	unsigned int i;
++
++	if (!hidpp->leds)
++		return;
++	for (i = 0; i < hidpp->leds->count; i++)
++		if (hidpp->leds->zones[i].registered)
++			led_classdev_multicolor_unregister(&hidpp->leds->zones[i].mc);
++}
++
++static int hidpp_led_triggers_register(void)
++{
++	int i, ret;
++
++	for (i = 0; i < ARRAY_SIZE(hidpp_led_effects); i++) {
++		ret = led_trigger_register(&hidpp_led_effects[i].trigger);
++		if (ret)
++			goto err;
++	}
++	return 0;
++
++err:
++	while (i--)
++		led_trigger_unregister(&hidpp_led_effects[i].trigger);
++	return ret;
++}
++
++static void hidpp_led_triggers_unregister(void)
++{
++	int i;
++
++	for (i = 0; i < ARRAY_SIZE(hidpp_led_effects); i++)
++		led_trigger_unregister(&hidpp_led_effects[i].trigger);
++}
++
++/* -------------------------------------------------------------------------- */
+ /* 0x4301: Solar Keyboard                                                     */
+ /* -------------------------------------------------------------------------- */
+ 
+@@ -4562,6 +4949,9 @@
+ 	if (hidpp->capabilities & HIDPP_CAPABILITY_HI_RES_SCROLL)
+ 		hi_res_scroll_enable(hidpp);
+ 
++	if (hidpp->protocol_major >= 2)
++		hidpp_leds_connect(hidpp);
++
+ 	if (!(hidpp->quirks & HIDPP_QUIRK_DELAYED_INIT) || hidpp->delayed_input)
+ 		/* if the input nodes are already created, we can stop now */
+ 		return;
+@@ -4725,6 +5115,7 @@
+ 	INIT_WORK(&hidpp->work, hidpp_connect_event);
+ 	INIT_WORK(&hidpp->reset_hi_res_work, hidpp_reset_hi_res_handler);
+ 	mutex_init(&hidpp->send_mutex);
++	mutex_init(&hidpp->led_lock);
+ 	init_waitqueue_head(&hidpp->wait);
+ 
+ 	/* indicates we are handling the battery properties in the kernel */
+@@ -4804,9 +5195,12 @@
+ 
+ 	sysfs_remove_group(&hdev->dev.kobj, &ps_attribute_group);
+ 
++	scoped_guard(mutex, &hidpp->led_lock)
++		hidpp->leds_stopped = true;
+ 	hid_hw_stop(hdev);
+ 	cancel_work_sync(&hidpp->work);
+ 	cancel_work_sync(&hidpp->reset_hi_res_work);
++	hidpp_leds_remove(hidpp);
+ 	mutex_destroy(&hidpp->send_mutex);
+ }
+ 
+@@ -5020,4 +5414,23 @@
+ 	.input_mapped = hidpp_input_mapped,
+ };
+ 
+-module_hid_driver(hidpp_driver);
++static int __init hidpp_init(void)
++{
++	int ret;
++
++	ret = hidpp_led_triggers_register();
++	if (ret)
++		return ret;
++	ret = hid_register_driver(&hidpp_driver);
++	if (ret)
++		hidpp_led_triggers_unregister();
++	return ret;
++}
++module_init(hidpp_init);
++
++static void __exit hidpp_exit(void)
++{
++	hid_unregister_driver(&hidpp_driver);
++	hidpp_led_triggers_unregister();
++}
++module_exit(hidpp_exit);
