@@ -11,6 +11,9 @@
  * whole backlight runs hardware effects. While a key LED is lit, the driver
  * draws the frame itself, with the lit keys on top. Brightness changes are
  * never stored in the keyboard.
+ *
+ * A virtual HID LampArray device gives the host the keys as lamps. Outside
+ * of autonomous mode its colors replace the backlight under the key LEDs.
  */
 
 #include <linux/fixp-arith.h>
@@ -104,6 +107,10 @@ struct rkbd_key {
 	u8 row;
 	u8 col;
 	u16 code;
+	/* HID keyboard usage, 0 for keys outside the keyboard page. */
+	u8 usage;
+	u32 x;
+	u32 y;
 	const char *name;
 };
 
@@ -172,6 +179,13 @@ struct rkbd {
 	u8 shown[RKBD_ROWS][RKBD_ROW_SIZE];
 
 	struct rkbd_led keys[RKBD_KEYS];
+
+	struct hid_device *lamps;
+	bool autonomous;
+	u16 lamp_cursor;
+	/* Updates collect in lamp_next until the host completes them. */
+	u8 lamp_next[RKBD_KEYS][3];
+	u8 lamp_color[RKBD_KEYS][3];
 
 	/* Input state, only touched from the HID event path. */
 	bool fn;
@@ -402,13 +416,14 @@ static void rkbd_hue_to_rgb(unsigned int hue, unsigned int brightness, u8 *rgb)
 
 static bool rkbd_animated(struct rkbd *kb)
 {
-	return kb->drawing && kb->backlight.brightness && kb->effect;
+	return kb->drawing && kb->autonomous && kb->backlight.brightness &&
+	       kb->effect;
 }
 
-static void rkbd_render(struct rkbd *kb)
+static void rkbd_render_effect(struct rkbd *kb)
 {
 	unsigned int brightness = kb->backlight.brightness;
-	unsigned int row, col, hue, level, i;
+	unsigned int row, col, hue, level;
 	u8 *p;
 
 	for (row = 0; row < RKBD_ROWS; row++) {
@@ -442,13 +457,30 @@ static void rkbd_render(struct rkbd *kb)
 			}
 		}
 	}
+}
+
+static u8 *rkbd_cell(struct rkbd *kb, unsigned int key)
+{
+	return kb->frame[rkbd_keys[key].row] + 3 * rkbd_keys[key].col;
+}
+
+static void rkbd_render(struct rkbd *kb)
+{
+	unsigned int i;
+
+	if (kb->autonomous) {
+		rkbd_render_effect(kb);
+	} else {
+		memset(kb->frame, 0, sizeof(kb->frame));
+		for (i = 0; i < RKBD_KEYS; i++)
+			memcpy(rkbd_cell(kb, i), kb->lamp_color[i], 3);
+	}
 
 	for (i = 0; i < RKBD_KEYS; i++) {
 		const struct rkbd_led *key = &kb->keys[i];
 
 		if (key->brightness)
-			rkbd_led_rgb(key, key->brightness,
-				     &kb->frame[rkbd_keys[i].row][3 * rkbd_keys[i].col]);
+			rkbd_led_rgb(key, key->brightness, rkbd_cell(kb, i));
 	}
 }
 
@@ -522,7 +554,8 @@ static void rkbd_schedule(struct rkbd *kb)
 
 static int rkbd_update(struct rkbd *kb)
 {
-	bool soft = !kb->effect || kb->effect->flags & RKBD_EFFECT_SOFT;
+	bool host = !kb->autonomous;
+	bool soft = host || !kb->effect || kb->effect->flags & RKBD_EFFECT_SOFT;
 	int ret;
 
 	lockdep_assert_held(&kb->lock);
@@ -530,7 +563,7 @@ static int rkbd_update(struct rkbd *kb)
 	if (kb->suspended || kb->stopped)
 		return 0;
 
-	kb->drawing = soft && rkbd_overlay(kb);
+	kb->drawing = soft && (host || rkbd_overlay(kb));
 	if (kb->drawing)
 		ret = rkbd_update_frame(kb);
 	else
@@ -759,6 +792,451 @@ static int rkbd_leds_register(struct rkbd *kb)
 	return ret;
 }
 
+enum {
+	LAMP_ARRAY_ATTRIBUTES = 1,
+	LAMP_ATTRIBUTES_REQUEST,
+	LAMP_ATTRIBUTES_RESPONSE,
+	LAMP_MULTI_UPDATE,
+	LAMP_RANGE_UPDATE,
+	LAMP_ARRAY_CONTROL,
+};
+
+#define LAMP_KIND_KEYBOARD 1
+#define LAMP_PURPOSE_CONTROL BIT(0)
+#define LAMP_PURPOSE_BRANDING BIT(2)
+#define LAMP_UPDATE_COMPLETE BIT(0)
+#define LAMP_MULTI_MAX 8
+
+/* A full frame: six rows and the show command, 8 ms per USB transfer. */
+#define LAMP_UPDATE_US 64000
+#define RKBD_DEPTH 39000
+
+/* The LampArray layout from the HID Usage Tables, 8 lamps per multi update. */
+static const u8 rkbd_lamps_desc[] = {
+	0x05, 0x59,			/* Usage Page (Lighting and Illumination) */
+	0x09, 0x01,			/* Usage (LampArray) */
+	0xa1, 0x01,			/* Collection (Application) */
+	0x85, LAMP_ARRAY_ATTRIBUTES,	/*  Report ID */
+	0x09, 0x02,			/*  Usage (LampArrayAttributesReport) */
+	0xa1, 0x02,			/*  Collection (Logical) */
+	0x09, 0x03,			/*   Usage (LampCount) */
+	0x15, 0x00,			/*   Logical Minimum (0) */
+	0x27, 0xff, 0xff, 0x00, 0x00,	/*   Logical Maximum (65535) */
+	0x75, 0x10,			/*   Report Size (16) */
+	0x95, 0x01,			/*   Report Count (1) */
+	0xb1, 0x03,			/*   Feature (Cnst,Var,Abs) */
+	0x09, 0x04,			/*   Usage (BoundingBoxWidthInMicrometers) */
+	0x09, 0x05,			/*   Usage (BoundingBoxHeightInMicrometers) */
+	0x09, 0x06,			/*   Usage (BoundingBoxDepthInMicrometers) */
+	0x09, 0x07,			/*   Usage (LampArrayKind) */
+	0x09, 0x08,			/*   Usage (MinUpdateIntervalInMicroseconds) */
+	0x15, 0x00,			/*   Logical Minimum (0) */
+	0x27, 0xff, 0xff, 0xff, 0x7f,	/*   Logical Maximum (2147483647) */
+	0x75, 0x20,			/*   Report Size (32) */
+	0x95, 0x05,			/*   Report Count (5) */
+	0xb1, 0x03,			/*   Feature (Cnst,Var,Abs) */
+	0xc0,				/*  End Collection */
+	0x85, LAMP_ATTRIBUTES_REQUEST,	/*  Report ID */
+	0x09, 0x20,			/*  Usage (LampAttributesRequestReport) */
+	0xa1, 0x02,			/*  Collection (Logical) */
+	0x09, 0x21,			/*   Usage (LampId) */
+	0x15, 0x00,			/*   Logical Minimum (0) */
+	0x27, 0xff, 0xff, 0x00, 0x00,	/*   Logical Maximum (65535) */
+	0x75, 0x10,			/*   Report Size (16) */
+	0x95, 0x01,			/*   Report Count (1) */
+	0xb1, 0x02,			/*   Feature (Data,Var,Abs) */
+	0xc0,				/*  End Collection */
+	0x85, LAMP_ATTRIBUTES_RESPONSE,	/*  Report ID */
+	0x09, 0x22,			/*  Usage (LampAttributesResponseReport) */
+	0xa1, 0x02,			/*  Collection (Logical) */
+	0x09, 0x21,			/*   Usage (LampId) */
+	0x15, 0x00,			/*   Logical Minimum (0) */
+	0x27, 0xff, 0xff, 0x00, 0x00,	/*   Logical Maximum (65535) */
+	0x75, 0x10,			/*   Report Size (16) */
+	0x95, 0x01,			/*   Report Count (1) */
+	0xb1, 0x02,			/*   Feature (Data,Var,Abs) */
+	0x09, 0x23,			/*   Usage (PositionXInMicrometers) */
+	0x09, 0x24,			/*   Usage (PositionYInMicrometers) */
+	0x09, 0x25,			/*   Usage (PositionZInMicrometers) */
+	0x09, 0x27,			/*   Usage (UpdateLatencyInMicroseconds) */
+	0x09, 0x26,			/*   Usage (LampPurposes) */
+	0x15, 0x00,			/*   Logical Minimum (0) */
+	0x27, 0xff, 0xff, 0xff, 0x7f,	/*   Logical Maximum (2147483647) */
+	0x75, 0x20,			/*   Report Size (32) */
+	0x95, 0x05,			/*   Report Count (5) */
+	0xb1, 0x02,			/*   Feature (Data,Var,Abs) */
+	0x09, 0x28,			/*   Usage (RedLevelCount) */
+	0x09, 0x29,			/*   Usage (GreenLevelCount) */
+	0x09, 0x2a,			/*   Usage (BlueLevelCount) */
+	0x09, 0x2b,			/*   Usage (IntensityLevelCount) */
+	0x09, 0x2c,			/*   Usage (IsProgrammable) */
+	0x09, 0x2d,			/*   Usage (InputBinding) */
+	0x15, 0x00,			/*   Logical Minimum (0) */
+	0x26, 0xff, 0x00,		/*   Logical Maximum (255) */
+	0x75, 0x08,			/*   Report Size (8) */
+	0x95, 0x06,			/*   Report Count (6) */
+	0xb1, 0x02,			/*   Feature (Data,Var,Abs) */
+	0xc0,				/*  End Collection */
+	0x85, LAMP_MULTI_UPDATE,	/*  Report ID */
+	0x09, 0x50,			/*  Usage (LampMultiUpdateReport) */
+	0xa1, 0x02,			/*  Collection (Logical) */
+	0x09, 0x03,			/*   Usage (LampCount) */
+	0x09, 0x55,			/*   Usage (LampUpdateFlags) */
+	0x15, 0x00,			/*   Logical Minimum (0) */
+	0x25, 0x08,			/*   Logical Maximum (8) */
+	0x75, 0x08,			/*   Report Size (8) */
+	0x95, 0x02,			/*   Report Count (2) */
+	0xb1, 0x02,			/*   Feature (Data,Var,Abs) */
+	0x09, 0x21,			/*   Usage (LampId) */
+	0x15, 0x00,			/*   Logical Minimum (0) */
+	0x27, 0xff, 0xff, 0x00, 0x00,	/*   Logical Maximum (65535) */
+	0x75, 0x10,			/*   Report Size (16) */
+	0x95, LAMP_MULTI_MAX,		/*   Report Count (8) */
+	0xb1, 0x02,			/*   Feature (Data,Var,Abs) */
+	0x09, 0x51, 0x09, 0x52, 0x09, 0x53, 0x09, 0x54, /*   Usage (Red..IntensityUpdateChannel) */
+	0x09, 0x51, 0x09, 0x52, 0x09, 0x53, 0x09, 0x54,
+	0x09, 0x51, 0x09, 0x52, 0x09, 0x53, 0x09, 0x54,
+	0x09, 0x51, 0x09, 0x52, 0x09, 0x53, 0x09, 0x54,
+	0x09, 0x51, 0x09, 0x52, 0x09, 0x53, 0x09, 0x54,
+	0x09, 0x51, 0x09, 0x52, 0x09, 0x53, 0x09, 0x54,
+	0x09, 0x51, 0x09, 0x52, 0x09, 0x53, 0x09, 0x54,
+	0x09, 0x51, 0x09, 0x52, 0x09, 0x53, 0x09, 0x54,
+	0x15, 0x00,			/*   Logical Minimum (0) */
+	0x26, 0xff, 0x00,		/*   Logical Maximum (255) */
+	0x75, 0x08,			/*   Report Size (8) */
+	0x95, 4 * LAMP_MULTI_MAX,	/*   Report Count (32) */
+	0xb1, 0x02,			/*   Feature (Data,Var,Abs) */
+	0xc0,				/*  End Collection */
+	0x85, LAMP_RANGE_UPDATE,	/*  Report ID */
+	0x09, 0x60,			/*  Usage (LampRangeUpdateReport) */
+	0xa1, 0x02,			/*  Collection (Logical) */
+	0x09, 0x55,			/*   Usage (LampUpdateFlags) */
+	0x15, 0x00,			/*   Logical Minimum (0) */
+	0x25, 0x08,			/*   Logical Maximum (8) */
+	0x75, 0x08,			/*   Report Size (8) */
+	0x95, 0x01,			/*   Report Count (1) */
+	0xb1, 0x02,			/*   Feature (Data,Var,Abs) */
+	0x09, 0x61,			/*   Usage (LampIdStart) */
+	0x09, 0x62,			/*   Usage (LampIdEnd) */
+	0x15, 0x00,			/*   Logical Minimum (0) */
+	0x27, 0xff, 0xff, 0x00, 0x00,	/*   Logical Maximum (65535) */
+	0x75, 0x10,			/*   Report Size (16) */
+	0x95, 0x02,			/*   Report Count (2) */
+	0xb1, 0x02,			/*   Feature (Data,Var,Abs) */
+	0x09, 0x51, 0x09, 0x52, 0x09, 0x53, 0x09, 0x54, /*   Usage (Red..IntensityUpdateChannel) */
+	0x15, 0x00,			/*   Logical Minimum (0) */
+	0x26, 0xff, 0x00,		/*   Logical Maximum (255) */
+	0x75, 0x08,			/*   Report Size (8) */
+	0x95, 0x04,			/*   Report Count (4) */
+	0xb1, 0x02,			/*   Feature (Data,Var,Abs) */
+	0xc0,				/*  End Collection */
+	0x85, LAMP_ARRAY_CONTROL,	/*  Report ID */
+	0x09, 0x70,			/*  Usage (LampArrayControlReport) */
+	0xa1, 0x02,			/*  Collection (Logical) */
+	0x09, 0x71,			/*   Usage (AutonomousMode) */
+	0x15, 0x00,			/*   Logical Minimum (0) */
+	0x25, 0x01,			/*   Logical Maximum (1) */
+	0x75, 0x08,			/*   Report Size (8) */
+	0x95, 0x01,			/*   Report Count (1) */
+	0xb1, 0x02,			/*   Feature (Data,Var,Abs) */
+	0xc0,				/*  End Collection */
+	0xc0,				/* End Collection */
+};
+
+struct lamp_array_attributes {
+	u8 id;
+	__le16 count;
+	__le32 width;
+	__le32 height;
+	__le32 depth;
+	__le32 kind;
+	__le32 min_interval;
+} __packed;
+
+struct lamp_attributes_request {
+	u8 id;
+	__le16 lamp;
+} __packed;
+
+struct lamp_attributes_response {
+	u8 id;
+	__le16 lamp;
+	__le32 x;
+	__le32 y;
+	__le32 z;
+	__le32 latency;
+	__le32 purposes;
+	u8 red_levels;
+	u8 green_levels;
+	u8 blue_levels;
+	u8 intensity_levels;
+	u8 programmable;
+	u8 input_binding;
+} __packed;
+
+struct lamp_rgbi {
+	u8 rgb[3];
+	u8 intensity;
+} __packed;
+
+struct lamp_multi_update {
+	u8 id;
+	u8 count;
+	u8 flags;
+	__le16 lamps[LAMP_MULTI_MAX];
+	struct lamp_rgbi colors[LAMP_MULTI_MAX];
+} __packed;
+
+struct lamp_range_update {
+	u8 id;
+	u8 flags;
+	__le16 start;
+	__le16 end;
+	struct lamp_rgbi color;
+} __packed;
+
+struct lamp_array_control {
+	u8 id;
+	u8 autonomous;
+} __packed;
+
+static struct rkbd *rkbd_lamps_kb(struct hid_device *lamps)
+{
+	return hid_get_drvdata(to_hid_device(lamps->dev.parent));
+}
+
+static int rkbd_lamps_attributes(struct lamp_array_attributes *rep)
+{
+	rep->count = cpu_to_le16(RKBD_KEYS);
+	rep->width = cpu_to_le32(RKBD_WIDTH);
+	rep->height = cpu_to_le32(RKBD_HEIGHT);
+	rep->depth = cpu_to_le32(RKBD_DEPTH);
+	rep->kind = cpu_to_le32(LAMP_KIND_KEYBOARD);
+	rep->min_interval = cpu_to_le32(LAMP_UPDATE_US);
+	return sizeof(*rep);
+}
+
+static int rkbd_lamps_response(struct rkbd *kb,
+			       struct lamp_attributes_response *rep)
+{
+	const struct rkbd_key *key = &rkbd_keys[kb->lamp_cursor];
+
+	memset(rep, 0, sizeof(*rep));
+	rep->lamp = cpu_to_le16(kb->lamp_cursor);
+	rep->x = cpu_to_le32(key->x);
+	rep->y = cpu_to_le32(key->y);
+	rep->latency = cpu_to_le32(LAMP_UPDATE_US);
+	rep->purposes = cpu_to_le32(strcmp(key->name, "logo") ?
+				    LAMP_PURPOSE_CONTROL :
+				    LAMP_PURPOSE_BRANDING);
+	rep->red_levels = 255;
+	rep->green_levels = 255;
+	rep->blue_levels = 255;
+	rep->intensity_levels = 1;
+	rep->programmable = 1;
+	rep->input_binding = key->usage;
+	kb->lamp_cursor = (kb->lamp_cursor + 1) % RKBD_KEYS;
+	return sizeof(*rep);
+}
+
+static void rkbd_lamps_stage(struct rkbd *kb, u16 lamp,
+			     const struct lamp_rgbi *color)
+{
+	int i;
+
+	/* One intensity level, color carries the brightness. */
+	for (i = 0; i < 3; i++)
+		kb->lamp_next[lamp][i] = color->intensity ? color->rgb[i] : 0;
+}
+
+static int rkbd_lamps_commit(struct rkbd *kb, u8 flags)
+{
+	if (!(flags & LAMP_UPDATE_COMPLETE))
+		return 0;
+	memcpy(kb->lamp_color, kb->lamp_next, sizeof(kb->lamp_color));
+	return kb->autonomous ? 0 : rkbd_update(kb);
+}
+
+/* The spec drops reports with lamps out of range without an error. */
+static int rkbd_lamps_multi(struct rkbd *kb,
+			    const struct lamp_multi_update *rep)
+{
+	unsigned int i;
+
+	if (rep->count > LAMP_MULTI_MAX)
+		return 0;
+	for (i = 0; i < rep->count; i++)
+		if (le16_to_cpu(rep->lamps[i]) >= RKBD_KEYS)
+			return 0;
+	for (i = 0; i < rep->count; i++)
+		rkbd_lamps_stage(kb, le16_to_cpu(rep->lamps[i]),
+				 &rep->colors[i]);
+	return rkbd_lamps_commit(kb, rep->flags);
+}
+
+static int rkbd_lamps_range(struct rkbd *kb,
+			    const struct lamp_range_update *rep)
+{
+	u16 start = le16_to_cpu(rep->start), end = le16_to_cpu(rep->end);
+	unsigned int i;
+
+	if (start > end || end >= RKBD_KEYS)
+		return 0;
+	for (i = start; i <= end; i++)
+		rkbd_lamps_stage(kb, i, &rep->color);
+	return rkbd_lamps_commit(kb, rep->flags);
+}
+
+static int rkbd_lamps_autonomous(struct rkbd *kb, bool autonomous)
+{
+	if (autonomous == kb->autonomous)
+		return 0;
+	kb->autonomous = autonomous;
+	/* The host starts from dark lamps. */
+	memset(kb->lamp_next, 0, sizeof(kb->lamp_next));
+	memset(kb->lamp_color, 0, sizeof(kb->lamp_color));
+	return rkbd_update(kb);
+}
+
+static int rkbd_lamps_get(struct rkbd *kb, u8 id, u8 *buf, size_t len)
+{
+	switch (id) {
+	case LAMP_ARRAY_ATTRIBUTES:
+		if (len < sizeof(struct lamp_array_attributes))
+			return -EINVAL;
+		return rkbd_lamps_attributes((void *)buf);
+	case LAMP_ATTRIBUTES_RESPONSE:
+		if (len < sizeof(struct lamp_attributes_response))
+			return -EINVAL;
+		return rkbd_lamps_response(kb, (void *)buf);
+	default:
+		return -EINVAL;
+	}
+}
+
+static int rkbd_lamps_set(struct rkbd *kb, u8 id, const u8 *buf, size_t len)
+{
+	const struct lamp_attributes_request *request = (const void *)buf;
+	const struct lamp_multi_update *multi = (const void *)buf;
+	const struct lamp_range_update *range = (const void *)buf;
+	const struct lamp_array_control *control = (const void *)buf;
+	int ret;
+
+	switch (id) {
+	case LAMP_ATTRIBUTES_REQUEST:
+		if (len < sizeof(*request))
+			return -EINVAL;
+		kb->lamp_cursor = le16_to_cpu(request->lamp);
+		if (kb->lamp_cursor >= RKBD_KEYS)
+			kb->lamp_cursor = 0;
+		return sizeof(*request);
+	case LAMP_MULTI_UPDATE:
+		if (len < sizeof(*multi))
+			return -EINVAL;
+		ret = rkbd_lamps_multi(kb, multi);
+		return ret ?: sizeof(*multi);
+	case LAMP_RANGE_UPDATE:
+		if (len < sizeof(*range))
+			return -EINVAL;
+		ret = rkbd_lamps_range(kb, range);
+		return ret ?: sizeof(*range);
+	case LAMP_ARRAY_CONTROL:
+		if (len < sizeof(*control))
+			return -EINVAL;
+		ret = rkbd_lamps_autonomous(kb, control->autonomous);
+		return ret ?: sizeof(*control);
+	default:
+		return -EINVAL;
+	}
+}
+
+static int rkbd_lamps_raw_request(struct hid_device *lamps, u8 id, u8 *buf,
+				  size_t len, unsigned char type, int request)
+{
+	struct rkbd *kb = rkbd_lamps_kb(lamps);
+	int ret;
+
+	if (type != HID_FEATURE_REPORT || !len)
+		return -EINVAL;
+
+	guard(mutex)(&kb->lock);
+	if (request == HID_REQ_GET_REPORT)
+		ret = rkbd_lamps_get(kb, id, buf, len);
+	else if (request == HID_REQ_SET_REPORT)
+		ret = rkbd_lamps_set(kb, id, buf, len);
+	else
+		ret = -EINVAL;
+	if (ret > 0)
+		buf[0] = id;
+	return ret;
+}
+
+static int rkbd_lamps_parse(struct hid_device *lamps)
+{
+	return hid_parse_report(lamps, rkbd_lamps_desc,
+				sizeof(rkbd_lamps_desc));
+}
+
+static int rkbd_lamps_start(struct hid_device *lamps)
+{
+	return 0;
+}
+
+static void rkbd_lamps_stop(struct hid_device *lamps)
+{
+}
+
+static int rkbd_lamps_open(struct hid_device *lamps)
+{
+	return 0;
+}
+
+/* A host that goes away hands the lamps back. */
+static void rkbd_lamps_close(struct hid_device *lamps)
+{
+	struct rkbd *kb = rkbd_lamps_kb(lamps);
+
+	guard(mutex)(&kb->lock);
+	rkbd_lamps_autonomous(kb, true);
+}
+
+static const struct hid_ll_driver rkbd_lamps_driver = {
+	.parse = rkbd_lamps_parse,
+	.start = rkbd_lamps_start,
+	.stop = rkbd_lamps_stop,
+	.open = rkbd_lamps_open,
+	.close = rkbd_lamps_close,
+	.raw_request = rkbd_lamps_raw_request,
+};
+
+static int rkbd_lamps_add(struct rkbd *kb)
+{
+	struct hid_device *lamps;
+	int ret;
+
+	lamps = hid_allocate_device();
+	if (IS_ERR(lamps))
+		return PTR_ERR(lamps);
+
+	lamps->ll_driver = &rkbd_lamps_driver;
+	lamps->dev.parent = &kb->hdev->dev;
+	lamps->bus = BUS_VIRTUAL;
+	lamps->vendor = kb->hdev->vendor;
+	lamps->product = kb->hdev->product;
+	lamps->version = kb->hdev->version;
+	snprintf(lamps->name, sizeof(lamps->name), "%s LampArray",
+		 kb->hdev->name);
+	strscpy(lamps->uniq, kb->hdev->uniq, sizeof(lamps->uniq));
+
+	ret = hid_add_device(lamps);
+	if (ret) {
+		hid_destroy_device(lamps);
+		return ret;
+	}
+	kb->lamps = lamps;
+	return 0;
+}
+
 /* Hands the keyboard back with the backlight off and Fn in its firmware. */
 static void rkbd_release(struct rkbd *kb)
 {
@@ -796,6 +1274,8 @@ static int rkbd_reboot_notify(struct notifier_block *nb, unsigned long action,
  */
 static void rkbd_teardown(struct rkbd *kb)
 {
+	if (kb->lamps)
+		hid_destroy_device(kb->lamps);
 	rkbd_release(kb);
 	hid_hw_stop(kb->hdev);
 	cancel_delayed_work_sync(&kb->animate);
@@ -943,6 +1423,7 @@ static int rkbd_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		return ret;
 
 	kb->hdev = hdev;
+	kb->autonomous = true;
 	INIT_DELAYED_WORK(&kb->animate, rkbd_animate_work);
 	hid_set_drvdata(hdev, kb);
 
@@ -975,6 +1456,10 @@ static int rkbd_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	ret = register_reboot_notifier(&kb->reboot_nb);
 	if (ret)
 		goto out_teardown;
+
+	ret = rkbd_lamps_add(kb);
+	if (ret)
+		hid_warn(hdev, "no LampArray device: %d\n", ret);
 	return 0;
 
 out_teardown:
