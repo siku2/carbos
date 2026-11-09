@@ -29,7 +29,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
   installPhase = ''
     runHook preInstall
-    node ${./depot.ts} $src depot
+    node ${../ghub-depot.ts} $src depot
     version=$(jq -r '.contents[0].version' depot/dfu.json)
     if [ "$version" != "${finalAttrs.version}" ]; then
       echo "the depot has $version, not ${finalAttrs.version}" >&2

@@ -16,7 +16,7 @@ fi
 read -r hash path < <(nix store prefetch-file --json "$url" | jq -r '"\(.hash) \(.storePath)"')
 depot=$(mktemp -d)
 trap 'rm -rf "$depot"' EXIT
-node "$(dirname "$file")/depot.ts" "$path" "$depot"
+node "$(dirname "$file")/../ghub-depot.ts" "$path" "$depot"
 version=$(jq -r '.contents[0].version' "$depot/dfu.json")
 
 sed -i \
