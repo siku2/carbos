@@ -298,8 +298,8 @@ static int rkbd_clear_frame(struct rkbd *kb)
 
 /*
  * Writing the last frame row resets the brightness to the stored one, so
- * frames blink unless it is full. The keyboard then starts in custom mode,
- * which shows the frame it last had, so it starts dark from a black one.
+ * frames blink unless it is full. The keyboard then flashes white at power-up
+ * and goes dark once it loads the stored black frame in custom mode.
  */
 static int rkbd_provision(struct rkbd *kb)
 {
@@ -1246,10 +1246,7 @@ static void rkbd_release(struct rkbd *kb)
 	if (kb->stopped)
 		return;
 	kb->stopped = true;
-	/* A USB reset restarts the keyboard on the last frame. */
-	ret = rkbd_clear_frame(kb);
-	if (!ret)
-		ret = rkbd_set_brightness(kb, 0);
+	ret = rkbd_set_brightness(kb, 0);
 	if (!ret)
 		ret = rkbd_set_mode(kb, MODE_NORMAL);
 	if (ret && ret != -ENODEV)
