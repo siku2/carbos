@@ -15,6 +15,36 @@
  
  		if (rcd->record_type == FU_IHEX_FIRMWARE_RECORD_TYPE_SIGNATURE) {
  			fu_struct_logitech_hidpp_bootloader_pkt_set_cmd(
+--- a/plugins/logitech-hidpp/fu-logitech-hidpp-bootloader-nordic.c
++++ b/plugins/logitech-hidpp/fu-logitech-hidpp-bootloader-nordic.c
+@@ -285,6 +285,19 @@
+ 	return TRUE;
+ }
+ 
++static FuFirmware *
++fu_logitech_hidpp_bootloader_nordic_prepare_firmware(FuDevice *device,
++						     GInputStream *stream,
++						     FuProgress *progress,
++						     FuFirmwareParseFlags flags,
++						     GError **error)
++{
++	g_autoptr(FuFirmware) firmware = fu_ihex_firmware_new();
++	if (!fu_firmware_tokenize(firmware, stream, flags, error))
++		return NULL;
++	return g_steal_pointer(&firmware);
++}
++
+ static gboolean
+ fu_logitech_hidpp_bootloader_nordic_write_firmware(FuDevice *device,
+ 						   FuFirmware *firmware,
+@@ -364,6 +377,7 @@
+ {
+ 	FuDeviceClass *device_class = FU_DEVICE_CLASS(klass);
+ 	device_class->write_firmware = fu_logitech_hidpp_bootloader_nordic_write_firmware;
++	device_class->prepare_firmware = fu_logitech_hidpp_bootloader_nordic_prepare_firmware;
+ 	device_class->setup = fu_logitech_hidpp_bootloader_nordic_setup;
+ }
+ 
 --- a/plugins/logitech-hidpp/fu-logitech-hidpp-bootloader-texas.c
 +++ b/plugins/logitech-hidpp/fu-logitech-hidpp-bootloader-texas.c
 @@ -216,6 +216,19 @@
@@ -65,20 +95,21 @@
  
  		fu_struct_logitech_hidpp_msg_set_report_id(st_req,
  							   FU_LOGITECH_HIDPP_REPORT_ID_LONG);
-@@ -1642,9 +1643,30 @@
+@@ -1642,9 +1643,31 @@
  						    st_req,
  						    self->hidpp_version,
  						    FU_LOGITECH_HIDPP_MSG_FLAG_IGNORE_SUB_ID,
 -						    error);
 +						    &error_local);
 +
-+		/* the bootloader enumerates as a different device, maybe before replying */
++		/* a wired bootloader enumerates as another USB device, maybe before replying */
 +		if (fu_device_has_private_flag(device,
-+					       FU_LOGITECH_HIDPP_DEVICE_FLAG_REBIND_ATTACH)) {
++					       FU_LOGITECH_HIDPP_DEVICE_FLAG_REBIND_ATTACH) &&
++		    !fu_device_has_private_flag(device, FU_LOGITECH_HIDPP_DEVICE_FLAG_BLE)) {
 +			if (st_rsp == NULL &&
 +			    !g_error_matches(error_local, FWUPD_ERROR, FWUPD_ERROR_READ) &&
 +			    !g_error_matches(error_local, FWUPD_ERROR, FWUPD_ERROR_WRITE) &&
-+			    !g_error_matches(error_local, FWUPD_ERROR, FWUPD_ERROR_NOT_FOUND)) {
++			    !g_error_matches(error_local, FWUPD_ERROR, FWUPD_ERROR_TIMED_OUT)) {
 +				g_propagate_prefixed_error(error,
 +							   g_steal_pointer(&error_local),
 +							   "failed to put device into DFU mode: ");
@@ -98,7 +129,7 @@
  			return FALSE;
  		}
  		fu_device_sleep(device, 200); /* ms */
-@@ -1878,6 +1900,13 @@
+@@ -1878,6 +1901,13 @@
  {
  	g_autoptr(GPtrArray) imgs = fu_firmware_get_images(firmware);
  
@@ -136,7 +167,7 @@
  			device_usb_iface =
 --- a/plugins/logitech-hidpp/logitech-hidpp.quirk
 +++ b/plugins/logitech-hidpp/logitech-hidpp.quirk
-@@ -218,3 +218,36 @@
+@@ -218,3 +218,38 @@
  ProxyGType = FuUdevDevice
  Flags = ble,no-request-required
  InstallDuration = 650
@@ -162,6 +193,7 @@
 +# Lightspeed Receiver (runtime)
 +[HIDRAW\VEN_046D&DEV_C53A]
 +Plugin = logitech_hidpp
++Name = Lightspeed Receiver
 +GType = FuLogitechHidppRuntimeUnifying
 +VendorId = USB:0x046D
 +InstallDuration = 30
@@ -169,6 +201,7 @@
 +# Lightspeed Receiver (bootloader)
 +[USB\VID_046D&PID_AACA]
 +Plugin = logitech_hidpp
++Name = Lightspeed Receiver
 +GType = FuLogitechHidppBootloaderTexas
 +FirmwareSizeMin = 0x4000
 +CounterpartGuid = HIDRAW\VEN_046D&DEV_C53A

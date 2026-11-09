@@ -331,7 +331,14 @@ function razerKeyboardAdapter(
       // A flash that stopped halfway leaves the keyboard in its bootloader.
       if (usbRelease("1532", "110d") === "0221") return "bootloader";
       if (usbRelease("1532", "0221") === undefined) return undefined;
-      return run("razer-kbd-flash", ["version"]).trim();
+      // One keyboard that does not answer should not hide the other devices.
+      try {
+        return run("razer-kbd-flash", ["version"]).trim();
+      } catch (error) {
+        if (!(error instanceof Failure)) throw error;
+        console.error(error.message);
+        return "unreadable";
+      }
     },
     flash: () => {
       if (!write("razer-kbd-flash", ["flash", image])) {
