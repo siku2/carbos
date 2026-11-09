@@ -53,6 +53,13 @@ configuration files as well.
 
 Never leave comments on pull requests or issues unless explicitly asked.
 
+### G8: scratch-not-tmp
+
+Put scripts, notes, downloads and other working files in `scratch/` at the
+repository root. Create it if it doesn't exist. It is gitignored globally, so
+don't add it to the project's `.gitignore`. Only use `/tmp` for output that
+can disappear at any time without loss.
+
 ## Commit style
 
 ### M1: commit-convention
