@@ -156,7 +156,14 @@ in
   };
 
   config = lib.mkMerge [
-    { environment.systemPackages = [ firmware ]; }
+    {
+      environment.systemPackages = [ firmware ];
+
+      # Wired Logitech mice re-enumerate for DFU, which fwupd does not expect.
+      services.fwupd.package = pkgs.fwupd.overrideAttrs (old: {
+        patches = old.patches or [ ] ++ [ ./fwupd-logitech-usb.patch ];
+      });
+    }
 
     # The PSP bootloader only takes a VBIOS update until a driver loads its
     # secure OS. The firmware command adds a one-shot boot entry with the

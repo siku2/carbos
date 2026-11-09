@@ -1,0 +1,81 @@
+--- a/plugins/logitech-hidpp/fu-logitech-hidpp-device.c
++++ b/plugins/logitech-hidpp/fu-logitech-hidpp-device.c
+@@ -1630,6 +1630,7 @@
+ 		    'U',
+ 		};
+ 		g_autoptr(FuStructLogitechHidppMsg) st_rsp = NULL;
++		g_autoptr(GError) error_local = NULL;
+ 
+ 		fu_struct_logitech_hidpp_msg_set_report_id(st_req,
+ 							   FU_LOGITECH_HIDPP_REPORT_ID_LONG);
+@@ -1642,9 +1643,30 @@
+ 						    st_req,
+ 						    self->hidpp_version,
+ 						    FU_LOGITECH_HIDPP_MSG_FLAG_IGNORE_SUB_ID,
+-						    error);
++						    &error_local);
++
++		/* the bootloader enumerates as a different device, maybe before replying */
++		if (fu_device_has_private_flag(device,
++					       FU_LOGITECH_HIDPP_DEVICE_FLAG_REBIND_ATTACH)) {
++			if (st_rsp == NULL &&
++			    !g_error_matches(error_local, FWUPD_ERROR, FWUPD_ERROR_READ) &&
++			    !g_error_matches(error_local, FWUPD_ERROR, FWUPD_ERROR_WRITE) &&
++			    !g_error_matches(error_local, FWUPD_ERROR, FWUPD_ERROR_NOT_FOUND)) {
++				g_propagate_prefixed_error(error,
++							   g_steal_pointer(&error_local),
++							   "failed to put device into DFU mode: ");
++				return FALSE;
++			}
++			if (st_rsp == NULL)
++				g_debug("ignoring '%s' on detach", error_local->message);
++			fu_device_set_poll_interval(device, 0);
++			fu_device_add_flag(device, FWUPD_DEVICE_FLAG_WAIT_FOR_REPLUG);
++			return TRUE;
++		}
+ 		if (st_rsp == NULL) {
+-			g_prefix_error_literal(error, "failed to put device into DFU mode: ");
++			g_propagate_prefixed_error(error,
++						   g_steal_pointer(&error_local),
++						   "failed to put device into DFU mode: ");
+ 			return FALSE;
+ 		}
+ 		fu_device_sleep(device, 200); /* ms */
+@@ -1878,6 +1900,13 @@
+ {
+ 	g_autoptr(GPtrArray) imgs = fu_firmware_get_images(firmware);
+ 
++	/* a single payload rather than a zip archive */
++	if (imgs->len == 0)
++		return fu_logitech_hidpp_device_write_firmware_dfu_img(self,
++								       firmware,
++								       progress,
++								       error);
++
+ 	/* write each image in the zip archive */
+ 	fu_progress_set_id(progress, G_STRLOC);
+ 	fu_progress_set_status(progress, FWUPD_STATUS_DEVICE_WRITE);
+--- a/plugins/logitech-hidpp/logitech-hidpp.quirk
++++ b/plugins/logitech-hidpp/logitech-hidpp.quirk
+@@ -218,3 +218,21 @@
+ ProxyGType = FuUdevDevice
+ Flags = ble,no-request-required
+ InstallDuration = 650
++
++# G903 over USB (runtime)
++[HIDRAW\VEN_046D&DEV_C086]
++Plugin = logitech_hidpp
++GType = FuLogitechHidppDevice
++ProxyGType = FuUdevDevice
++CounterpartGuid = HIDRAW\VEN_046D&DEV_AAD8
++Flags = rebind-attach,force-receiver-id,replug-match-guid
++InstallDuration = 60
++
++# G903 over USB (bootloader)
++[HIDRAW\VEN_046D&DEV_AAD8]
++Plugin = logitech_hidpp
++GType = FuLogitechHidppDevice
++ProxyGType = FuUdevDevice
++CounterpartGuid = HIDRAW\VEN_046D&DEV_C086
++Flags = rebind-attach,force-receiver-id,replug-match-guid
++InstallDuration = 60
