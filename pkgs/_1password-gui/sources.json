@@ -1,0 +1,15 @@
+{
+  "darwin": {
+    "version": "8.12.44",
+    "hashes": {
+      "aarch64": "sha256-mySxRkv0N4DwThr6+LB0LyFjypTbiwYgBZ56BaJJj6E="
+    }
+  },
+  "linux": {
+    "version": "8.12.44",
+    "hashes": {
+      "x86_64": "sha256-3iPSYBlx6zvRJXh7ljzgDmfSiQfoJt3RL3fJh4UUB4U=",
+      "aarch64": "sha256-UBRrsUvAEOhELLacFy74/yUBwHgp+xglQYjnFz65zXQ="
+    }
+  }
+}
