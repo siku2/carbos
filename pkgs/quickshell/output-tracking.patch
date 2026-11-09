@@ -1,0 +1,41 @@
+From f3f6d2576a3b4e965ed3ea1e40f770d24bd65d86 Mon Sep 17 00:00:00 2001
+From: x <x>
+Date: Mon, 9 Nov 2026 22:08:51 +0100
+Subject: [PATCH] wayland/output_tracking: keep screenRemoved connected after
+ late outputs
+
+---
+ src/wayland/output_tracking.cpp | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/wayland/output_tracking.cpp b/src/wayland/output_tracking.cpp
+index 91ba3b8..fb27414 100644
+--- a/src/wayland/output_tracking.cpp
++++ b/src/wayland/output_tracking.cpp
+@@ -53,9 +53,9 @@ void WlOutputTracker::removeOutput(::wl_output* output) {
+ 		if (this->mOutputs.isEmpty()) {
+ 			QObject::disconnect(
+ 			    static_cast<QGuiApplication*>(QGuiApplication::instance()), // NOLINT
+-			    nullptr,
++			    &QGuiApplication::screenAdded,
+ 			    this,
+-			    nullptr
++			    &WlOutputTracker::onQScreenAdded
+ 			);
+ 		}
+ 	}
+@@ -70,9 +70,9 @@ void WlOutputTracker::onQScreenAdded(QScreen* screen) {
+ 			if (this->mOutputs.isEmpty()) {
+ 				QObject::disconnect(
+ 				    static_cast<QGuiApplication*>(QGuiApplication::instance()), // NOLINT
+-				    nullptr,
++				    &QGuiApplication::screenAdded,
+ 				    this,
+-				    nullptr
++				    &WlOutputTracker::onQScreenAdded
+ 				);
+ 			}
+ 		}
+-- 
+2.54.0
+
