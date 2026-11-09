@@ -4,6 +4,7 @@ let
   bios = firmware.asus-tuf-x670e-plus;
   dock = firmware.lenovo-hybrid-dock;
   g903 = firmware.logitech-g903;
+  receiver = firmware.logitech-powerplay-receiver;
 in
 {
   carbos.firmware.devices = {
@@ -56,6 +57,16 @@ in
       method.fwupd = {
         instanceId = "HIDRAW\\VEN_046D&DEV_C086";
         images = [ "g903.dfu" ];
+      };
+    };
+
+    receiver = {
+      description = "Logitech POWERPLAY receiver";
+      package = receiver;
+      version = receiver.deviceVersion;
+      method.fwupd = {
+        instanceId = "HIDRAW\\VEN_046D&DEV_C53A";
+        images = [ "c53a.shex" ];
       };
     };
 
