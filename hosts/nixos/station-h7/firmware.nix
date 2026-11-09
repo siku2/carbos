@@ -3,6 +3,7 @@ let
   firmware = pkgs.device-firmware;
   bios = firmware.asus-tuf-x670e-plus;
   dock = firmware.lenovo-hybrid-dock;
+  g903 = firmware.logitech-g903;
 in
 {
   carbos.firmware.devices = {
@@ -38,6 +39,17 @@ in
         vendorId = "31e9";
         productId = "0008";
         image = "ssl2-mk2.bin";
+      };
+    };
+
+    # G HUB only updates the mouse over its USB cable.
+    g903 = {
+      description = "Logitech G903 mouse";
+      package = g903;
+      version = g903.deviceVersion;
+      method.fwupd = {
+        instanceId = "HIDRAW\\VEN_046D&DEV_C086";
+        images = [ "g903.dfu" ];
       };
     };
 
