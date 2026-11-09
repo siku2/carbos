@@ -160,6 +160,14 @@ impl Keyboard {
         }
     }
 
+    /// Gives a claimed interface back to its kernel driver.
+    pub(crate) fn release(&self) -> io::Result<()> {
+        match self {
+            Self::Hidraw(_) => Ok(()),
+            Self::Usb(device, interface) => device.reconnect(*interface),
+        }
+    }
+
     /// Reads the app version the way Razer's updater does.
     pub(crate) fn version(&self) -> Result<String, Error> {
         let args = self.query(&Report::new(TID_DEFAULT, CLASS_DEVICE, CMD_VERSION, 8, &[]))?;

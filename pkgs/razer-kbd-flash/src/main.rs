@@ -116,13 +116,14 @@ fn load(path: &Path) -> Result<Plan, Error> {
     Plan::parse(&text).map_err(|err| Error::Image(path.to_owned(), err))
 }
 
-/// The steps of a flash, in order.
+/// The steps of a flash, in order. The first flush empties the page buffer
+/// that an earlier, aborted run may have left, before the erase.
 fn steps(plan: &Plan) -> impl Iterator<Item = Step<'_>> {
-    plan.sectors
-        .iter()
-        .map(|sector| Step::Erase(*sector))
+    [Step::Flush(&plan.flush)]
+        .into_iter()
+        .chain(plan.sectors.iter().map(|sector| Step::Erase(*sector)))
         .chain(plan.packets.iter().map(Step::Write))
-        .chain([Step::Write(&plan.flush)])
+        .chain([Step::Flush(&plan.flush)])
         .chain(plan.packets.iter().map(Step::Verify))
         .chain([Step::Exit])
 }
@@ -197,13 +198,19 @@ fn flash(path: &Path) -> Result<(), Error> {
         );
         let device = Device::open(&app).map_err(Error::Usb)?;
         device.claim(COMMAND_INTERFACE).map_err(Error::Usb)?;
-        Keyboard::Usb(device, COMMAND_INTERFACE).enter_bootloader()?;
+        let keyboard = Keyboard::Usb(device, COMMAND_INTERFACE);
+        if let Err(err) = keyboard.enter_bootloader() {
+            if let Err(err) = keyboard.release() {
+                eprintln!("razer-kbd-flash: cannot give the keyboard back to its driver: {err}");
+            }
+            return Err(err.into());
+        }
         println!("entered the bootloader");
     }
 
     let (_, device) = wait_for(&BOOTLOADER, "bootloader")?;
     let bootloader = Bootloader(device);
-    let total = plan.sectors.len() + 2 * plan.packets.len() + 2;
+    let total = steps(&plan).count();
     for (done, step) in steps(&plan).enumerate() {
         bootloader
             .run(&step)

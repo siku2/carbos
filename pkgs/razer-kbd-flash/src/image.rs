@@ -104,7 +104,13 @@ impl Plan {
             return Err(Error::Empty);
         }
 
-        let sectors = packets.iter().map(|p| p.start / SECTOR * SECTOR).collect();
+        // The exit request writes the marker, so its sector is always erased.
+        let sectors = packets
+            .iter()
+            .map(|p| p.start)
+            .chain([MARKER.0])
+            .map(|address| address / SECTOR * SECTOR)
+            .collect();
 
         let byte = |address: u16| {
             packets
@@ -139,7 +145,7 @@ fn parse_records(text: &str) -> Result<Vec<(u16, Vec<u8>)>, Error> {
         }
         let bytes = line
             .strip_prefix(':')
-            .filter(|hex| hex.len() % 2 == 0)
+            .filter(|hex| hex.is_ascii() && hex.len() % 2 == 0)
             .and_then(|hex| {
                 (0..hex.len())
                     .step_by(2)
@@ -165,12 +171,13 @@ fn parse_records(text: &str) -> Result<Vec<(u16, Vec<u8>)>, Error> {
                 }
                 records.push((address, data.to_vec()));
             }
-            1 => break,
+            1 if data.is_empty() => break,
             // An extended linear address of 0 keeps the 16 bit addresses.
             4 if data == [0, 0] => {}
-            4 => return Err(Error::Address { line: line_number }),
+            4 if data.len() == 2 => return Err(Error::Address { line: line_number }),
             // The start address does not matter to the bootloader.
-            5 => {}
+            5 if data.len() == 4 => {}
+            1 | 4 | 5 => return Err(Error::Syntax { line: line_number }),
             kind => {
                 return Err(Error::Type {
                     line: line_number,
@@ -180,4 +187,82 @@ fn parse_records(text: &str) -> Result<Vec<(u16, Vec<u8>)>, Error> {
         }
     }
     Ok(records)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Error, Plan};
+
+    /// Builds an Intel HEX record with its checksum.
+    fn record(kind: u8, address: u16, data: &[u8]) -> String {
+        let [high, low] = address.to_be_bytes();
+        let bytes: Vec<u8> = [u8::try_from(data.len()).expect("short"), high, low, kind]
+            .into_iter()
+            .chain(data.iter().copied())
+            .collect();
+        let sum = bytes.iter().fold(0u8, |sum, b| sum.wrapping_add(*b));
+        let hex: String = bytes
+            .iter()
+            .chain([&sum.wrapping_neg()])
+            .map(|b| format!("{b:02X}"))
+            .collect();
+        format!(":{hex}\n")
+    }
+
+    /// A small image: a bootloader record, app data with the version, and
+    /// the marker.
+    fn image(app: &[(u16, &[u8])]) -> String {
+        let mut text = record(4, 0, &[0, 0]);
+        text += &record(0, 0x0000, &[0xAA; 16]);
+        for (address, data) in app {
+            text += &record(0, *address, data);
+        }
+        text += &record(0, 0x7FFC, &[0x70, 0x56, 0x30, 0x12]);
+        text += &record(5, 0, &[0, 0, 0x10, 0xC1]);
+        text += &record(1, 0, &[]);
+        text
+    }
+
+    #[test]
+    fn plan_skips_the_bootloader_and_erases_the_marker_sector() {
+        let text = image(&[(0x1000, &[1; 16]), (0x6DA8, &[0, 0, 0, 1, 1, 0, 0, 0])]);
+        let plan = Plan::parse(&text).expect("valid image");
+        let starts: Vec<u16> = plan.packets.iter().map(|p| p.start).collect();
+        assert_eq!(starts, [0x1000, 0x1008, 0x6DA8]);
+        assert_eq!(
+            plan.sectors.iter().copied().collect::<Vec<_>>(),
+            [0x1000, 0x6000, 0x7000]
+        );
+        assert_eq!(plan.flush.start, 0x7FFC);
+        assert_eq!(plan.version, "1.01.00");
+    }
+
+    #[test]
+    fn plan_needs_the_marker() {
+        let text = record(0, 0x1000, &[1; 16]) + &record(1, 0, &[]);
+        assert!(matches!(Plan::parse(&text), Err(Error::Marker)));
+    }
+
+    #[test]
+    fn parse_rejects_bad_records() {
+        assert!(matches!(
+            Plan::parse(":0\u{e9}A\n"),
+            Err(Error::Syntax { line: 1 })
+        ));
+        let mut bad = record(0, 0x1000, &[1; 16]);
+        bad.replace_range(bad.len() - 3..bad.len() - 1, "00");
+        assert!(matches!(
+            Plan::parse(&bad),
+            Err(Error::Checksum { line: 1 })
+        ));
+        assert!(matches!(
+            Plan::parse(&record(5, 0, &[0, 0])),
+            Err(Error::Syntax { line: 1 })
+        ));
+        let overlap = record(0, 0x1000, &[1; 16]) + &record(0, 0x1008, &[1; 8]);
+        assert!(matches!(
+            Plan::parse(&overlap),
+            Err(Error::Order { line: 2 })
+        ));
+    }
 }

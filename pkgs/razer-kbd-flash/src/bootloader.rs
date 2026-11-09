@@ -16,6 +16,7 @@ const OUT: u8 = 0x40;
 const POLL: Duration = Duration::from_millis(10);
 /// Long enough for a sector erase, which takes about 100 ms.
 const POLLS: usize = 200;
+const SECTOR_SPAN: u16 = 0xFFF;
 const STATUS: u8 = 0x8F;
 const STATUS_BUSY: u8 = 0xFF;
 const STATUS_OK: u8 = 0x01;
@@ -62,6 +63,7 @@ impl From<io::Error> for Error {
 pub(crate) enum Target {
     Erase(u16),
     Exit,
+    Flush,
     Verify(u16),
     Write(u16),
 }
@@ -71,6 +73,7 @@ impl fmt::Display for Target {
         match self {
             Self::Erase(at) => write!(f, "erasing the sector at {at:#06x}"),
             Self::Exit => write!(f, "leaving the bootloader"),
+            Self::Flush => write!(f, "flushing the page buffer"),
             Self::Verify(at) => write!(f, "verifying the packet at {at:#06x}"),
             Self::Write(at) => write!(f, "writing the packet at {at:#06x}"),
         }
@@ -81,6 +84,9 @@ impl fmt::Display for Target {
 pub(crate) enum Step<'a> {
     Erase(u16),
     Exit,
+    /// Programs the page in the bootloader's buffer: a write outside the app
+    /// range, which the bootloader drops after it programs the open page.
+    Flush(&'a Packet),
     Verify(&'a Packet),
     Write(&'a Packet),
 }
@@ -90,6 +96,7 @@ impl Step<'_> {
         match self {
             Self::Erase(at) => Target::Erase(*at),
             Self::Exit => Target::Exit,
+            Self::Flush(_) => Target::Flush,
             Self::Verify(p) => Target::Verify(p.start),
             Self::Write(p) => Target::Write(p.start),
         }
@@ -103,8 +110,15 @@ impl fmt::Display for Step<'_> {
             p.data.iter().try_for_each(|b| write!(f, " {b:02x}"))
         };
         match self {
-            Self::Erase(sector) => write!(f, "erase {sector:#06x}..={:#06x}", sector + ERASE_SPAN),
+            Self::Erase(sector) => {
+                write!(
+                    f,
+                    "erase sector {sector:#06x}..={:#06x}",
+                    sector + SECTOR_SPAN
+                )
+            }
             Self::Exit => write!(f, "exit"),
+            Self::Flush(p) => packet(f, "flush with", p),
             Self::Verify(p) => packet(f, "verify", p),
             Self::Write(p) => packet(f, "write", p),
         }
@@ -117,7 +131,8 @@ impl Bootloader {
     /// Runs one step and waits until the bootloader reports success.
     pub(crate) fn run(&self, step: &Step<'_>) -> Result<(), Error> {
         match step {
-            // Razer's updater sends the erase as an IN request.
+            // Razer's updater sends the erase as an IN request, with the end
+            // of its 512 byte erase step. The bootloader erases the sector.
             Step::Erase(sector) => {
                 self.0
                     .control(IN, ERASE, *sector, sector + ERASE_SPAN, &mut [], TIMEOUT)?;
@@ -127,11 +142,11 @@ impl Bootloader {
                 let _ = self.0.control(OUT, EXIT, 0, 0, &mut [], TIMEOUT);
                 return Ok(());
             }
-            Step::Verify(packet) | Step::Write(packet) => {
-                let request = if matches!(step, Step::Write(_)) {
-                    WRITE
-                } else {
+            Step::Flush(packet) | Step::Verify(packet) | Step::Write(packet) => {
+                let request = if matches!(step, Step::Verify(_)) {
                     VERIFY
+                } else {
+                    WRITE
                 };
                 let mut data = packet.data.clone();
                 self.0

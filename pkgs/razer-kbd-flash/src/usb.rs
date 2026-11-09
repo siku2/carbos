@@ -10,8 +10,11 @@ use std::time::Duration;
 
 const HIDIOCGFEATURE_91: c_ulong = 0xC05B_4807;
 const HIDIOCSFEATURE_91: c_ulong = 0xC05B_4806;
+const USBDEVFS_CONNECT: i32 = 0x5517;
 const USBDEVFS_CONTROL: c_ulong = 0xC018_5500;
 const USBDEVFS_DISCONNECT_CLAIM: c_ulong = 0x8108_551B;
+const USBDEVFS_IOCTL: c_ulong = 0xC010_5512;
+const USBDEVFS_RELEASEINTERFACE: c_ulong = 0x8004_5510;
 
 unsafe extern "C" {
     fn ioctl(fd: i32, request: c_ulong, ...) -> i32;
@@ -33,6 +36,13 @@ struct DisconnectClaim {
     interface: u32,
     flags: u32,
     driver: [u8; 256],
+}
+
+#[repr(C)]
+struct UsbIoctl {
+    interface: i32,
+    code: i32,
+    data: *mut c_void,
 }
 
 /// A USB device in sysfs, identified by its IDs.
@@ -125,6 +135,33 @@ impl Device {
         let ret = unsafe { ioctl(self.file.as_raw_fd(), USBDEVFS_CONTROL, &mut transfer) };
         usize::try_from(ret).map_err(|_| io::Error::last_os_error())
     }
+
+    /// Releases a claimed interface and lets its kernel driver bind again.
+    pub(crate) fn reconnect(&self, interface: u8) -> io::Result<()> {
+        let mut number = u32::from(interface);
+        // SAFETY: the argument is the interface number.
+        let ret = unsafe {
+            ioctl(
+                self.file.as_raw_fd(),
+                USBDEVFS_RELEASEINTERFACE,
+                &mut number,
+            )
+        };
+        if ret < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let mut command = UsbIoctl {
+            interface: i32::from(interface),
+            code: USBDEVFS_CONNECT,
+            data: ptr::null_mut(),
+        };
+        // SAFETY: the struct matches usbdevfs_ioctl, CONNECT takes no data.
+        let ret = unsafe { ioctl(self.file.as_raw_fd(), USBDEVFS_IOCTL, &mut command) };
+        if ret < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
 }
 
 /// The hidraw node of one interface, for feature reports with report ID 0.
@@ -141,7 +178,10 @@ impl Hidraw {
         let interface_dir = format!("{}:1.{interface}", name.to_string_lossy());
         for entry in fs::read_dir("/sys/class/hidraw")? {
             let entry = entry?;
-            let device = fs::canonicalize(entry.path().join("device"))?;
+            // A node that goes away during the scan is not the one we want.
+            let Ok(device) = fs::canonicalize(entry.path().join("device")) else {
+                continue;
+            };
             if device
                 .parent()
                 .and_then(Path::file_name)
