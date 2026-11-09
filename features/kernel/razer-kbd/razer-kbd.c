@@ -9,8 +9,8 @@
  *
  * Lighting is one LED for the whole backlight plus one LED per key. The
  * whole backlight runs hardware effects. While a key LED is lit, the driver
- * draws the frame itself, with the lit keys on top. Brightness is never
- * stored in the keyboard.
+ * draws the frame itself, with the lit keys on top. Brightness changes are
+ * never stored in the keyboard.
  */
 
 #include <linux/fixp-arith.h>
@@ -38,6 +38,7 @@
 #define RKBD_BRIGHTNESS_STEP 32
 
 enum {
+	STATUS_NEW = 0x00,
 	STATUS_BUSY = 0x01,
 	STATUS_OK = 0x02,
 	STATUS_FAILED = 0x03,
@@ -58,10 +59,12 @@ enum {
 
 #define CLASS_LED 0x03
 #define CMD_BRIGHTNESS 0x03
+#define CMD_GET_BRIGHTNESS 0x83
 #define CMD_MATRIX_EFFECT 0x0a
 #define CMD_MATRIX_ROW 0x0b
 
 #define NOSTORE 0x00
+#define VARSTORE 0x01
 #define BACKLIGHT_LED 0x05
 #define FRAME_ID 0xff
 
@@ -176,8 +179,9 @@ struct rkbd {
 	unsigned long fn_pressed;
 };
 
-static int rkbd_cmd(struct rkbd *kb, u8 tid, u8 class, u8 cmd, const u8 *args,
-		    u8 len, u8 *resp)
+/* Sends a command without waiting for it, the next command queues behind it. */
+static int rkbd_send(struct rkbd *kb, u8 tid, u8 class, u8 cmd, const u8 *args,
+		     u8 len)
 {
 	u8 *report = kb->buf + 1;
 	u8 crc = 0;
@@ -201,7 +205,17 @@ static int rkbd_cmd(struct rkbd *kb, u8 tid, u8 class, u8 cmd, const u8 *args,
 
 	ret = hid_hw_raw_request(kb->hdev, 0, kb->buf, RKBD_REPORT_SIZE + 1,
 				 HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
-	if (ret < 0)
+	return ret < 0 ? ret : 0;
+}
+
+static int rkbd_cmd(struct rkbd *kb, u8 tid, u8 class, u8 cmd, const u8 *args,
+		    u8 len, u8 *resp)
+{
+	u8 *report = kb->buf + 1;
+	int i, ret;
+
+	ret = rkbd_send(kb, tid, class, cmd, args, len);
+	if (ret)
 		return ret;
 
 	for (i = 0; i < RKBD_RETRIES; i++) {
@@ -211,13 +225,14 @@ static int rkbd_cmd(struct rkbd *kb, u8 tid, u8 class, u8 cmd, const u8 *args,
 					 HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
 		if (ret < 0)
 			return ret;
-		if (report[0] != STATUS_BUSY)
+		if (report[0] != STATUS_NEW && report[0] != STATUS_BUSY)
 			break;
 	}
 
 	switch (report[0]) {
 	case STATUS_OK:
 		break;
+	case STATUS_NEW:
 	case STATUS_BUSY:
 	case STATUS_TIMEOUT:
 		return -ETIMEDOUT;
@@ -250,6 +265,51 @@ static int rkbd_set_brightness(struct rkbd *kb, u8 brightness)
 
 	return rkbd_cmd(kb, TID_DEFAULT, CLASS_LED, CMD_BRIGHTNESS, args,
 			sizeof(args), NULL);
+}
+
+/* Rows only show with the next custom effect command. */
+static int rkbd_clear_frame(struct rkbd *kb)
+{
+	u8 args[4 + RKBD_ROW_SIZE] = { FRAME_ID, 0, 0, RKBD_COLS - 1 };
+	int ret;
+
+	for (args[1] = 0; args[1] < RKBD_ROWS; args[1]++) {
+		ret = rkbd_send(kb, TID_MATRIX, CLASS_LED, CMD_MATRIX_ROW, args,
+				sizeof(args));
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
+/*
+ * Writing the last frame row resets the brightness to the stored one, so
+ * frames blink unless it is full. The keyboard then starts in custom mode,
+ * which shows the frame it last had, so it starts dark from a black one.
+ */
+static int rkbd_provision(struct rkbd *kb)
+{
+	u8 query[] = { VARSTORE, BACKLIGHT_LED, 0 };
+	u8 store[] = { EFFECT_CUSTOM, VARSTORE };
+	u8 full[] = { VARSTORE, BACKLIGHT_LED, LED_FULL };
+	u8 resp[RKBD_ARGS_MAX];
+	int ret;
+
+	ret = rkbd_cmd(kb, TID_DEFAULT, CLASS_LED, CMD_GET_BRIGHTNESS, query,
+		       sizeof(query), resp);
+	if (ret || resp[2] == LED_FULL)
+		return ret;
+
+	ret = rkbd_clear_frame(kb);
+	if (!ret)
+		ret = rkbd_cmd(kb, TID_MATRIX, CLASS_LED, CMD_MATRIX_EFFECT,
+			       store, sizeof(store), NULL);
+	if (!ret)
+		ret = rkbd_cmd(kb, TID_DEFAULT, CLASS_LED, CMD_BRIGHTNESS,
+			       full, sizeof(full), NULL);
+	if (!ret)
+		hid_info(kb->hdev, "stored custom mode at full brightness\n");
+	return ret;
 }
 
 static void rkbd_led_rgb(const struct rkbd_led *led, unsigned int brightness,
@@ -396,7 +456,7 @@ static int rkbd_update_frame(struct rkbd *kb)
 {
 	u8 args[4 + RKBD_ROW_SIZE] = { FRAME_ID };
 	u8 show[] = { EFFECT_CUSTOM, NOSTORE };
-	bool entering = !kb->custom, changed = false, last_row = false;
+	bool entering = !kb->custom, changed = false;
 	unsigned int row;
 	int ret;
 
@@ -410,12 +470,11 @@ static int rkbd_update_frame(struct rkbd *kb)
 		args[2] = 0;
 		args[3] = RKBD_COLS - 1;
 		memcpy(args + 4, kb->frame[row], RKBD_ROW_SIZE);
-		ret = rkbd_cmd(kb, TID_MATRIX, CLASS_LED, CMD_MATRIX_ROW, args,
-			       sizeof(args), NULL);
+		ret = rkbd_send(kb, TID_MATRIX, CLASS_LED, CMD_MATRIX_ROW, args,
+				sizeof(args));
 		if (ret)
 			goto err;
 		changed = true;
-		last_row = row == RKBD_ROWS - 1;
 	}
 
 	if (changed) {
@@ -425,11 +484,8 @@ static int rkbd_update_frame(struct rkbd *kb)
 			goto err;
 	}
 
-	/*
-	 * Entering custom mode and writing the last row reset the brightness to
-	 * the stored one. The frame carries the brightness.
-	 */
-	if (entering || last_row) {
+	/* Entering custom mode drops the brightness. The frame carries it. */
+	if (entering) {
 		ret = rkbd_set_brightness(kb, LED_FULL);
 		if (ret)
 			goto err;
@@ -712,7 +768,10 @@ static void rkbd_release(struct rkbd *kb)
 	if (kb->stopped)
 		return;
 	kb->stopped = true;
-	ret = rkbd_set_brightness(kb, 0);
+	/* A USB reset restarts the keyboard on the last frame. */
+	ret = rkbd_clear_frame(kb);
+	if (!ret)
+		ret = rkbd_set_brightness(kb, 0);
 	if (!ret)
 		ret = rkbd_set_mode(kb, MODE_NORMAL);
 	if (ret && ret != -ENODEV)
@@ -895,6 +954,8 @@ static int rkbd_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	scoped_guard(mutex, &kb->lock) {
 		ret = rkbd_cmd(kb, TID_DEFAULT, CLASS_DEVICE, CMD_FIRMWARE,
 			       NULL, 2, version);
+		if (!ret)
+			ret = rkbd_provision(kb);
 		if (!ret)
 			ret = rkbd_set_mode(kb, MODE_DRIVER);
 		if (!ret)
