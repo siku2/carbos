@@ -20,6 +20,7 @@ type Method =
   | { fwupd: { instanceId: string; images: string[] } }
   | { samsungNvme: { device: string } }
   | { xmos: { vendorId: string; productId: string; image: string } }
+  | { razerKeyboard: { image: string } }
   | { amdGpu: { pciId: string; subsystemId: string; images: string[] } }
   | { esp: { image: string } };
 
@@ -320,6 +321,28 @@ function xmosAdapter(
   };
 }
 
+function razerKeyboardAdapter(
+  device: Device,
+  method: Extract<Method, { razerKeyboard: unknown }>["razerKeyboard"],
+): Adapter {
+  const image = join(device.package, method.image);
+  return {
+    current: () => {
+      // A flash that stopped halfway leaves the keyboard in its bootloader.
+      if (usbRelease("1532", "110d") === "0221") return "bootloader";
+      if (usbRelease("1532", "0221") === undefined) return undefined;
+      return run("razer-kbd-flash", ["version"]).trim();
+    },
+    flash: () => {
+      if (!write("razer-kbd-flash", ["flash", image])) {
+        throw new Failure(
+          "razer-kbd-flash failed, the keyboard may wait in its bootloader, run the flash again to finish it",
+        );
+      }
+    },
+  };
+}
+
 interface Atom {
   version: string;
   // Ends in the BIOS switch position, like 744CHB.22.1.2.12.AS01P.
@@ -565,6 +588,8 @@ function adapter(name: string, device: Device, manifest: Manifest): Adapter {
   if ("samsungNvme" in method)
     return samsungAdapter(device, method.samsungNvme);
   if ("xmos" in method) return xmosAdapter(device, method.xmos);
+  if ("razerKeyboard" in method)
+    return razerKeyboardAdapter(device, method.razerKeyboard);
   if ("amdGpu" in method)
     return amdGpuAdapter(name, device, method.amdGpu, manifest);
   return espAdapter(name, device, method.esp, manifest.esp);

@@ -61,6 +61,10 @@ let
       image = image "The image in the package to send with xmosdfu.";
     };
 
+    razerKeyboard = method "Flash a Razer BlackWidow Chroma V2 with razer-kbd-flash." {
+      image = image "The Intel HEX image in the package.";
+    };
+
     amdGpu =
       method "Flash a Navi3x VBIOS through the PSP bootloader, in a boot that keeps the GPU off amdgpu."
         {
@@ -141,6 +145,7 @@ let
       pkgs.amd-psp-flash
       pkgs.nodejs-slim
       pkgs.nvme-cli
+      pkgs.razer-kbd-flash
       pkgs.xmosdfu
     ];
     text = ''

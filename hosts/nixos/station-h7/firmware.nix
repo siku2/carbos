@@ -42,6 +42,12 @@ in
       };
     };
 
+    keyboard = {
+      description = "Razer BlackWidow Chroma V2 keyboard";
+      package = firmware.razer-blackwidow-chroma-v2;
+      method.razerKeyboard.image = "bwc2.hex";
+    };
+
     # G HUB only updates the mouse over its USB cable.
     g903 = {
       description = "Logitech G903 mouse";
