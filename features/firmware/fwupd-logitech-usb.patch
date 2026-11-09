@@ -1,3 +1,60 @@
+--- a/plugins/logitech-hidpp/fu-logitech-hidpp-bootloader.c
++++ b/plugins/logitech-hidpp/fu-logitech-hidpp-bootloader.c
+@@ -52,6 +52,14 @@
+ 
+ 		if (rcd->record_type == FU_IHEX_FIRMWARE_RECORD_TYPE_EOF)
+ 			break;
++		if (rcd->byte_cnt > FU_STRUCT_LOGITECH_HIDPP_BOOTLOADER_PKT_N_ELEMENTS_DATA) {
++			g_set_error(error,
++				    FWUPD_ERROR,
++				    FWUPD_ERROR_INVALID_DATA,
++				    "firmware data invalid: too large %u bytes",
++				    rcd->byte_cnt);
++			return NULL;
++		}
+ 
+ 		if (rcd->record_type == FU_IHEX_FIRMWARE_RECORD_TYPE_SIGNATURE) {
+ 			fu_struct_logitech_hidpp_bootloader_pkt_set_cmd(
+--- a/plugins/logitech-hidpp/fu-logitech-hidpp-bootloader-texas.c
++++ b/plugins/logitech-hidpp/fu-logitech-hidpp-bootloader-texas.c
+@@ -216,6 +216,19 @@
+ 	return TRUE;
+ }
+ 
++static FuFirmware *
++fu_logitech_hidpp_bootloader_texas_prepare_firmware(FuDevice *device,
++						    GInputStream *stream,
++						    FuProgress *progress,
++						    FuFirmwareParseFlags flags,
++						    GError **error)
++{
++	g_autoptr(FuFirmware) firmware = fu_ihex_firmware_new();
++	if (!fu_firmware_tokenize(firmware, stream, flags, error))
++		return NULL;
++	return g_steal_pointer(&firmware);
++}
++
+ static gboolean
+ fu_logitech_hidpp_bootloader_texas_write_firmware(FuDevice *device,
+ 						  FuFirmware *firmware,
+@@ -289,6 +302,7 @@
+ {
+ 	FuDeviceClass *device_class = FU_DEVICE_CLASS(klass);
+ 	device_class->write_firmware = fu_logitech_hidpp_bootloader_texas_write_firmware;
++	device_class->prepare_firmware = fu_logitech_hidpp_bootloader_texas_prepare_firmware;
+ 	device_class->setup = fu_logitech_hidpp_bootloader_texas_setup;
+ }
+ 
+--- a/plugins/logitech-hidpp/fu-logitech-hidpp-common.h
++++ b/plugins/logitech-hidpp/fu-logitech-hidpp-common.h
+@@ -18,6 +18,7 @@
+ #define FU_LOGITECH_HIDPP_DEVICE_PID_BOOTLOADER_TEXAS	    0xAAAC
+ #define FU_LOGITECH_HIDPP_DEVICE_PID_BOOTLOADER_TEXAS_PICO  0xAAAD
+ #define FU_LOGITECH_HIDPP_DEVICE_PID_BOOTLOADER_BOLT	    0xAB07
++#define FU_LOGITECH_HIDPP_DEVICE_PID_BOOTLOADER_LIGHTSPEED 0xAACA
+ 
+ /* Signed firmware are very long to verify on the device */
+ #define FU_LOGITECH_HIDPP_DEVICE_TIMEOUT_MS 30000
 --- a/plugins/logitech-hidpp/fu-logitech-hidpp-device.c
 +++ b/plugins/logitech-hidpp/fu-logitech-hidpp-device.c
 @@ -1630,6 +1630,7 @@
@@ -55,9 +112,31 @@
  	/* write each image in the zip archive */
  	fu_progress_set_id(progress, G_STRLOC);
  	fu_progress_set_status(progress, FWUPD_STATUS_DEVICE_WRITE);
+--- a/plugins/logitech-hidpp/fu-logitech-hidpp-runtime.c
++++ b/plugins/logitech-hidpp/fu-logitech-hidpp-runtime.c
+@@ -104,6 +104,19 @@
+ 							   FU_DEVICE_INSTANCE_FLAG_COUNTERPART);
+ 			priv->version_bl_major = 0x03;
+ 			break;
++		case 0x4000:
++			/* lightspeed, a texas style bootloader */
++			devid2 = g_strdup_printf(
++			    "USB\\VID_%04X&PID_%04X",
++			    fu_device_get_vid(device),
++			    (guint)FU_LOGITECH_HIDPP_DEVICE_PID_BOOTLOADER_LIGHTSPEED);
++			fu_device_add_instance_id_full(device,
++						       devid2,
++						       FU_DEVICE_INSTANCE_FLAG_QUIRKS |
++							   FU_DEVICE_INSTANCE_FLAG_VISIBLE |
++							   FU_DEVICE_INSTANCE_FLAG_COUNTERPART);
++			priv->version_bl_major = 0x03;
++			break;
+ 		case 0x0500:
+ 			/* bolt */
+ 			device_usb_iface =
 --- a/plugins/logitech-hidpp/logitech-hidpp.quirk
 +++ b/plugins/logitech-hidpp/logitech-hidpp.quirk
-@@ -218,3 +218,21 @@
+@@ -218,3 +218,36 @@
  ProxyGType = FuUdevDevice
  Flags = ble,no-request-required
  InstallDuration = 650
@@ -79,3 +158,18 @@
 +CounterpartGuid = HIDRAW\VEN_046D&DEV_C086
 +Flags = rebind-attach,force-receiver-id,replug-match-guid
 +InstallDuration = 60
++
++# Lightspeed Receiver (runtime)
++[HIDRAW\VEN_046D&DEV_C53A]
++Plugin = logitech_hidpp
++GType = FuLogitechHidppRuntimeUnifying
++VendorId = USB:0x046D
++InstallDuration = 30
++
++# Lightspeed Receiver (bootloader)
++[USB\VID_046D&PID_AACA]
++Plugin = logitech_hidpp
++GType = FuLogitechHidppBootloaderTexas
++FirmwareSizeMin = 0x4000
++CounterpartGuid = HIDRAW\VEN_046D&DEV_C53A
++InstallDuration = 30
