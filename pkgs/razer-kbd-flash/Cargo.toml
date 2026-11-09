@@ -1,0 +1,16 @@
+[package]
+name = "razer-kbd-flash"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+[profile.release]
+lto = true
+
+[lints.rust]
+unreachable_pub = "warn"
+
+[lints.clippy]
+arbitrary_source_item_ordering = "warn"
+mod_module_files = "warn"
