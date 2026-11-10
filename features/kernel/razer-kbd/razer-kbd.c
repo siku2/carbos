@@ -54,7 +54,7 @@ enum {
 
 #define CLASS_DEVICE 0x00
 #define CMD_DEVICE_MODE 0x04
-#define CMD_FIRMWARE 0x81
+#define CMD_VERSION 0x87
 
 /* Mode 0x01 is the bootloader, which erases the firmware on entry. */
 #define MODE_NORMAL 0x00
@@ -156,6 +156,8 @@ struct rkbd {
 	/* Serializes device I/O and all state below. */
 	struct mutex lock;
 	u8 *buf;
+	/* Major, minor and patch, read at probe. A flash re-enumerates. */
+	u8 version[3];
 	/* No device I/O while suspended or after shutdown. */
 	bool suspended;
 	bool stopped;
@@ -1430,8 +1432,10 @@ static int rkbd_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		goto out_drvdata;
 
 	scoped_guard(mutex, &kb->lock) {
-		ret = rkbd_cmd(kb, TID_DEFAULT, CLASS_DEVICE, CMD_FIRMWARE,
-			       NULL, 2, version);
+		ret = rkbd_cmd(kb, TID_DEFAULT, CLASS_DEVICE, CMD_VERSION,
+			       NULL, 8, version);
+		if (!ret)
+			memcpy(kb->version, version, sizeof(kb->version));
 		if (!ret)
 			ret = rkbd_provision(kb);
 		if (!ret)
@@ -1443,7 +1447,8 @@ static int rkbd_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		hid_err(hdev, "setup failed: %d\n", ret);
 		goto out_stop;
 	}
-	hid_info(hdev, "firmware %u.%u\n", version[0], version[1]);
+	hid_info(hdev, "firmware %u.%02u.%02u\n", kb->version[0], kb->version[1],
+		 kb->version[2]);
 
 	ret = rkbd_leds_register(kb);
 	if (ret)
@@ -1515,6 +1520,37 @@ static int __maybe_unused rkbd_resume(struct hid_device *hdev)
 	return 0;
 }
 
+/* In the format of Razer's updater, which the firmware packages use too. */
+static ssize_t firmware_version_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
+{
+	struct rkbd *kb = hid_get_drvdata(to_hid_device(dev));
+
+	return sysfs_emit(buf, "%u.%02u.%02u\n", kb->version[0],
+			  kb->version[1], kb->version[2]);
+}
+static DEVICE_ATTR_RO(firmware_version);
+
+static struct attribute *rkbd_attrs[] = {
+	&dev_attr_firmware_version.attr,
+	NULL
+};
+
+/* Only the command interface has driver data, and probe set it before. */
+static umode_t rkbd_attr_visible(struct kobject *kobj, struct attribute *attr,
+				 int n)
+{
+	struct device *dev = kobj_to_dev(kobj);
+
+	return hid_get_drvdata(to_hid_device(dev)) ? attr->mode : 0;
+}
+
+static const struct attribute_group rkbd_group = {
+	.attrs = rkbd_attrs,
+	.is_visible = rkbd_attr_visible,
+};
+__ATTRIBUTE_GROUPS(rkbd);
+
 static const struct hid_device_id rkbd_table[] = {
 	{ HID_USB_DEVICE(0x1532, 0x0221) }, /* BlackWidow Chroma V2 */
 	{ }
@@ -1529,6 +1565,9 @@ static struct hid_driver rkbd_driver = {
 	.event = rkbd_event,
 	.raw_event = rkbd_raw_event,
 	.input_configured = rkbd_input_configured,
+	.driver = {
+		.dev_groups = rkbd_groups,
+	},
 #ifdef CONFIG_PM
 	.suspend = rkbd_suspend,
 	.resume = rkbd_resume,
