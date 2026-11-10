@@ -321,6 +321,17 @@ function xmosAdapter(
   };
 }
 
+// The version the razer-kbd driver read when it bound the keyboard.
+function razerKeyboardVersion(): string | undefined {
+  const root = "/sys/bus/hid/drivers/razer-kbd";
+  if (!existsSync(root)) return undefined;
+  for (const entry of readdirSync(root)) {
+    const file = join(root, entry, "firmware_version");
+    if (existsSync(file)) return readFileSync(file, "utf8").trim();
+  }
+  return undefined;
+}
+
 function razerKeyboardAdapter(
   device: Device,
   method: Extract<Method, { razerKeyboard: unknown }>["razerKeyboard"],
@@ -330,15 +341,7 @@ function razerKeyboardAdapter(
     current: () => {
       // A flash that stopped halfway leaves the keyboard in its bootloader.
       if (usbRelease("1532", "110d") === "0221") return "bootloader";
-      if (usbRelease("1532", "0221") === undefined) return undefined;
-      // One keyboard that does not answer should not hide the other devices.
-      try {
-        return run("razer-kbd-flash", ["version"]).trim();
-      } catch (error) {
-        if (!(error instanceof Failure)) throw error;
-        console.error(error.message);
-        return "unreadable";
-      }
+      return razerKeyboardVersion();
     },
     flash: () => {
       if (!write("razer-kbd-flash", ["flash", image])) {
