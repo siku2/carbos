@@ -43,6 +43,8 @@ const BOOTLOADER: Id = Id {
 };
 /// The interface the kernel driver sends commands to.
 const COMMAND_INTERFACE: u8 = 1;
+/// The razer-kbd kernel driver, which reads the version when it binds.
+const DRIVER: &str = "/sys/bus/hid/drivers/razer-kbd";
 /// An interface with a hidraw node while the kernel driver is bound.
 const QUERY_INTERFACE: u8 = 0;
 const USAGE: &str = "usage: razer-kbd-flash check <image> | plan <image> | version | flash <image>";
@@ -56,6 +58,7 @@ enum Error {
     Keyboard(razer::Error),
     NoHidraw,
     NoKeyboard,
+    NotBound,
     Timeout(&'static str),
     Usage,
     Usb(io::Error),
@@ -76,6 +79,7 @@ impl fmt::Display for Error {
                 "the keyboard has no hidraw node on interface {QUERY_INTERFACE}"
             ),
             Self::NoKeyboard => write!(f, "no BlackWidow Chroma V2 found"),
+            Self::NotBound => write!(f, "the razer-kbd driver is not bound to the keyboard"),
             Self::Timeout(what) => write!(f, "the {what} did not appear"),
             Self::Usage => f.write_str(USAGE),
             Self::Usb(_) => write!(f, "cannot open the USB device"),
@@ -98,6 +102,7 @@ impl std::error::Error for Error {
             Self::Keyboard(err) => Some(err),
             Self::NoHidraw
             | Self::NoKeyboard
+            | Self::NotBound
             | Self::Timeout(_)
             | Self::Usage
             | Self::Version { .. } => None,
@@ -149,9 +154,39 @@ fn query_keyboard(path: &Path) -> Result<Keyboard, Error> {
     Ok(Keyboard::Hidraw(hidraw))
 }
 
+/// The version the driver read for the keyboard in sysfs, if it is bound.
+fn driver_version(app: &Path) -> io::Result<Option<String>> {
+    let app = fs::canonicalize(app)?;
+    for entry in fs::read_dir(DRIVER)? {
+        let Ok(device) = fs::canonicalize(entry?.path()) else {
+            continue;
+        };
+        if !device.starts_with(&app) {
+            continue;
+        }
+        match fs::read_to_string(device.join("firmware_version")) {
+            Ok(version) => return Ok(Some(version.trim().to_owned())),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err),
+        }
+    }
+    Ok(None)
+}
+
+/// Asks the driver if it is loaded, so the queries do not interleave with its
+/// commands. Without it, asks the keyboard.
+fn app_version(app: &Path) -> Result<String, Error> {
+    if !Path::new(DRIVER).exists() {
+        return Ok(query_keyboard(app)?.version()?);
+    }
+    driver_version(app)
+        .map_err(|err| Error::Io(PathBuf::from(DRIVER), err))?
+        .ok_or(Error::NotBound)
+}
+
 fn version() -> Result<(), Error> {
     let path = APP.find().map_err(Error::Usb)?.ok_or(Error::NoKeyboard)?;
-    println!("{}", query_keyboard(&path)?.version()?);
+    println!("{}", app_version(&path)?);
     Ok(())
 }
 
@@ -191,11 +226,7 @@ fn flash(path: &Path) -> Result<(), Error> {
         println!("the keyboard is in its bootloader, continuing");
     } else {
         let app = APP.find().map_err(Error::Usb)?.ok_or(Error::NoKeyboard)?;
-        println!(
-            "running {}, flashing {}",
-            query_keyboard(&app)?.version()?,
-            plan.version
-        );
+        println!("running {}, flashing {}", app_version(&app)?, plan.version);
         let device = Device::open(&app).map_err(Error::Usb)?;
         device.claim(COMMAND_INTERFACE).map_err(Error::Usb)?;
         let keyboard = Keyboard::Usb(device, COMMAND_INTERFACE);
@@ -223,7 +254,7 @@ fn flash(path: &Path) -> Result<(), Error> {
     let (app, _) = wait_for(&APP, "keyboard")?;
     let start = Instant::now();
     let found = loop {
-        match query_keyboard(&app).and_then(|keyboard| Ok(keyboard.version()?)) {
+        match app_version(&app) {
             Ok(found) => break found,
             Err(err) if start.elapsed() > WAIT => return Err(err),
             Err(_) => thread::sleep(Duration::from_millis(500)),
