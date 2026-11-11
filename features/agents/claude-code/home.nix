@@ -49,6 +49,26 @@ let
     '';
     inherit (pkgs.claude-code) meta;
   };
+
+  # Some safety checks still prompt in bypass mode and block the session
+  # until answered. Deny them so the agent can choose another approach.
+  denyPromptsInBypass = pkgs.writeShellApplication {
+    name = "claude-deny-prompts-in-bypass";
+    runtimeInputs = [ pkgs.jq ];
+    text = ''
+      if jq -e '.permission_mode == "bypassPermissions"' >/dev/null; then
+        jq -n '{
+          hookSpecificOutput: {
+            hookEventName: "PermissionRequest",
+            decision: {
+              behavior: "deny",
+              message: "Denied automatically: static safety analysis flagged this command because it could not verify what the command affects. Rewrite it so its targets are explicit, for example with literal paths instead of variables or command substitutions."
+            }
+          }
+        }'
+      fi
+    '';
+  };
 in
 {
   programs.claude-code = {
@@ -81,6 +101,16 @@ in
         CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY = "1";
       };
       permissions.defaultMode = "auto";
+      hooks.PermissionRequest = [
+        {
+          hooks = [
+            {
+              type = "command";
+              command = lib.getExe denyPromptsInBypass;
+            }
+          ];
+        }
+      ];
       askUserQuestionTimeout = "10m";
       enableArtifact = false;
       feedbackDrafts = "off";
