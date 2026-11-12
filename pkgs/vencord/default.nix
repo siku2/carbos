@@ -3,25 +3,14 @@ let
   # Inside the overlay, `vencord` already refers to this package.
   nixpkgs = callPackage (path + "/pkgs/by-name/ve/vencord/package.nix") { };
 
-  # TODO: drop once nixpkgs ships 1.15.16, which fixes Discord's rspack update.
-  upstream = nixpkgs.overrideAttrs (old: {
-    version = "1.15.16";
-    src = old.src.override { hash = "sha256-aUJubLJpyLAZWiOezqFxPY6oVPgWVPQpajFqrJvrO9U="; };
-    patches = [ ];
-    postPatch = "";
-    pnpmDeps = old.pnpmDeps.overrideAttrs {
-      outputHash = "sha256-1HcQH0ZZixQvziehIDhyBUB8v5ckufxrS2yUq2BcMVQ=";
-    };
-  });
-
   workspace = callPackage ./workspace.nix { inherit types; };
-  types = callPackage ./types.nix { vencord = upstream; };
+  types = callPackage ./types.nix { vencord = nixpkgs; };
   catalog = callPackage ./catalog.nix {
-    vencord = upstream;
+    vencord = nixpkgs;
     inherit workspace;
   };
 in
-upstream.overrideAttrs (old: {
+nixpkgs.overrideAttrs (old: {
   # esbuild applies the tsconfig nearest to a file's real path. Ours maps the
   # Vencord imports to declarations, so the plugins are copied, not linked.
   preBuild = (old.preBuild or "") + ''
