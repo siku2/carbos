@@ -103,6 +103,7 @@ in
       permissions.defaultMode = "auto";
       hooks.PermissionRequest = [
         {
+          matcher = "Bash";
           hooks = [
             {
               type = "command";
