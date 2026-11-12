@@ -13,11 +13,11 @@
 
 stdenvNoCC.mkDerivation rec {
   pname = "windows-app";
-  version = "11.4.4";
+  version = "11.4.5";
 
   src = fetchurl {
     url = "https://res.public.onecdn.static.microsoft/mro1cdnstorage/C1297A47-86C4-4C1F-97FA-950631F94777/MacAutoupdate/Windows_App_${version}_installer.pkg";
-    hash = "sha256-cAQSEOwcQMvMGRMBD7mn3n4rDI2fM2d3d1eJrmW8nKs=";
+    hash = "sha256-vH7T4BzCB8CV/arIrfMo1NkvR8Q7qYCp1YUN2rRGiLo=";
   };
 
   nativeBuildInputs = [
