@@ -8,5 +8,6 @@
     ./logitech-hidpp/nixos.nix
     ./sp5100-tco/nixos.nix
     ./amdgpu-mst-wake/nixos.nix
+    ./xone/nixos.nix
   ];
 }

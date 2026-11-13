@@ -1,0 +1,40 @@
+diff --git a/bus/bus.h b/bus/bus.h
+index 95c483f..2ca6326 100644
+--- a/bus/bus.h
++++ b/bus/bus.h
+@@ -87,6 +87,8 @@ struct gip_client {
+ 	struct gip_audio_config audio_config_out;
+ 
+ 	struct gip_serial_number serial;
++
++	bool reset_requested;
+ };
+ 
+ struct gip_driver_ops {
+diff --git a/bus/protocol.c b/bus/protocol.c
+index 9152be5..5aeba65 100644
+--- a/bus/protocol.c
++++ b/bus/protocol.c
+@@ -1198,6 +1198,22 @@ static int gip_handle_pkt_status(struct gip_client *client,
+ 		return 0;
+ 	}
+ 
++	/*
++	 * Wired devices keep their session across a USB reset, for example
++	 * after system sleep, and never announce again. A power reset makes
++	 * them reconnect and announce.
++	 */
++	if (!client->hardware.vendor && !client->hardware.product &&
++	    !client->hardware.version) {
++		if (client->reset_requested)
++			return 0;
++
++		gip_dbg(client, "%s: status before announce, resetting\n",
++			__func__);
++		client->reset_requested = true;
++		return gip_set_power_mode(client, GIP_PWR_RESET);
++	}
++
+ 	batt_type = FIELD_GET(GIP_BATT_TYPE, pkt->status);
+ 	batt_lvl = FIELD_GET(GIP_BATT_LEVEL, pkt->status);
+ 
