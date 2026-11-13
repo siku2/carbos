@@ -1,0 +1,82 @@
+diff --git a/src/shared/Core/Authentication/JsonWebToken.cs b/src/shared/Core/Authentication/JsonWebToken.cs
+new file mode 100644
+index 0000000..90c9e0a
+--- /dev/null
++++ b/src/shared/Core/Authentication/JsonWebToken.cs
+@@ -0,0 +1,53 @@
++using System;
++using System.Text.Json;
++
++namespace GitCredentialManager.Authentication
++{
++    public static class JsonWebToken
++    {
++        public static bool TryGetExpiry(string value, out DateTimeOffset expiry)
++        {
++            expiry = default;
++            if (string.IsNullOrEmpty(value))
++            {
++                return false;
++            }
++
++            string[] parts = value.Split('.');
++            if (parts.Length != 3)
++            {
++                return false;
++            }
++
++            try
++            {
++                using JsonDocument header = JsonDocument.Parse(DecodeBase64Url(parts[0]));
++                if (!header.RootElement.TryGetProperty("typ", out JsonElement typ) ||
++                    !StringComparer.OrdinalIgnoreCase.Equals(typ.GetString(), "JWT"))
++                {
++                    return false;
++                }
++
++                using JsonDocument payload = JsonDocument.Parse(DecodeBase64Url(parts[1]));
++                if (!payload.RootElement.TryGetProperty("exp", out JsonElement exp) ||
++                    !exp.TryGetInt64(out long seconds))
++                {
++                    return false;
++                }
++
++                expiry = DateTimeOffset.FromUnixTimeSeconds(seconds);
++                return true;
++            }
++            catch (Exception)
++            {
++                return false;
++            }
++        }
++
++        private static byte[] DecodeBase64Url(string value)
++        {
++            string base64 = value.Replace('-', '+').Replace('_', '/');
++            return Convert.FromBase64String(base64.PadRight(base64.Length + (4 - base64.Length % 4) % 4, '='));
++        }
++    }
++}
+diff --git a/src/shared/Core/GenericHostProvider.cs b/src/shared/Core/GenericHostProvider.cs
+index a66729a..6e09b88 100644
+--- a/src/shared/Core/GenericHostProvider.cs
++++ b/src/shared/Core/GenericHostProvider.cs
+@@ -79,11 +79,16 @@ namespace GitCredentialManager
+                 _context.Trace.WriteLine("Creating new credential...");
+                 return await GenerateCredentialAsync(input);
+             }
+-            else
++
++            // Refresh a little early so the token does not expire during the request.
++            if (JsonWebToken.TryGetExpiry(credential.Password, out DateTimeOffset expiry) &&
++                expiry <= DateTimeOffset.UtcNow.AddMinutes(1))
+             {
+-                _context.Trace.WriteLine("Existing credential found.");
++                _context.Trace.WriteLine($"Existing credential expired at {expiry:O}, creating new credential...");
++                return await GenerateCredentialAsync(input);
+             }
+ 
++            _context.Trace.WriteLine("Existing credential found.");
+             return new GetCredentialResult(credential);
+         }
+ 
