@@ -1,14 +1,13 @@
 {
   config,
   lib,
-  pkgs,
   ...
 }:
 let
   cfg = config.carbos.ccache;
   inherit (config.programs.ccache) cacheDir;
 
-  conf = (pkgs.formats.keyValue { }).generate "ccache.conf" {
+  conf = lib.generators.toKeyValue { } {
     max_size = cfg.maxSize;
   };
 in
@@ -24,6 +23,10 @@ in
 
     nix.settings.extra-sandbox-paths = [ cacheDir ];
 
-    systemd.tmpfiles.rules = [ "L+ ${cacheDir}/ccache.conf - - - - ${conf}" ];
+    # A real file, since a store symlink dangles inside the build sandbox.
+    systemd.tmpfiles.settings.ccache."${cacheDir}/ccache.conf"."f+" = {
+      mode = "0644";
+      argument = conf;
+    };
   };
 }
