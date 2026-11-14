@@ -6,6 +6,7 @@
     ./fonts.nix
     ./niri/nixos.nix
     ./nixos.nix
+    ./printing/nixos.nix
   ];
 
   flake.modules.homeManager.desktop.imports = [
