@@ -1,0 +1,20 @@
+--- a/cups/ppd-cache.c
++++ b/cups/ppd-cache.c
+@@ -4316,6 +4316,17 @@
+       else
+         default_color = "RGB";
+     }
++    else if (keyword && ippGetBoolean(ippFindAttribute(supported, "color-supported", IPP_TAG_BOOLEAN), 0))
++    {
++      // For "auto" on a color printer, prefer sRGB over the first listed mode.
++      for (i = 0, count = ippGetCount(attr); i < count && !default_color; i ++)
++      {
++        const char *mode = ippGetString(attr, i, NULL);
++
++        if (!strcasecmp(mode, "srgb_8") || !strncmp(mode, "SRGB24", 6) || !strcmp(mode, "color"))
++          default_color = "RGB";
++      }
++    }
+ 
+     cupsFilePrintf(fp, "*%% ColorModel from %s\n", ippGetName(attr));
+ 
