@@ -16,11 +16,8 @@ hash=$(nix store prefetch-file --json "$url" | jq -r .hash)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 curl -fsSL "$url" | tar xz -C "$work"
-(
-  cd "$work/package"
-  npm pkg delete workspaces scripts devDependencies
-  npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-)
+npm --prefix "$work/package" pkg delete workspaces scripts devDependencies
+npm --prefix "$work/package" install --package-lock-only --ignore-scripts --no-audit --no-fund
 cp "$work/package/package-lock.json" "$dir/package-lock.json"
 npmDepsHash=$(prefetch-npm-deps "$dir/package-lock.json")
 
