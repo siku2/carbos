@@ -8,6 +8,7 @@
 }:
 let
   extensions = with (pkgs.extend inputs.zed-extensions.overlays.default).zed-extensions; [
+    bitbake
     cargo-tom
     dockerfile
     git-firefly
@@ -87,6 +88,7 @@ in
       pkgs.basedpyright
       pkgs.bash-language-server
       pkgs.clang-tools
+      pkgs.language-server-bitbake
       pkgs.nil
       pkgs.nixd
       pkgs.package-version-server
