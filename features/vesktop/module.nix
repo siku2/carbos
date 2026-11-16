@@ -59,6 +59,15 @@ let
         fi
         cp "$declaredPath" $out
       '';
+
+  # Vesktop saves by writing name.tmp and renaming it over name. A read-only
+  # name.tmp makes the save fail before it replaces the link.
+  readOnly =
+    name: source:
+    lib.genAttrs [ name "${name}.tmp" ] (_: {
+      inherit source;
+      force = true;
+    });
 in
 {
   options.carbos.vesktop = {
@@ -111,15 +120,9 @@ in
     home.packages = [ (cfg.package.override { withSystemVencord = true; }) ];
 
     # Read-only on purpose. Changes made in the app last until it restarts.
-    xdg.configFile = {
-      "vesktop/settings.json" = {
-        source = vesktop;
-        force = true;
-      };
-      "vesktop/settings/settings.json" = {
-        source = vencord;
-        force = true;
-      };
+    xdg.configFile = lib.concatMapAttrs readOnly {
+      "vesktop/settings.json" = vesktop;
+      "vesktop/settings/settings.json" = vencord;
     };
   };
 }
