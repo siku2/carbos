@@ -1,7 +1,7 @@
-{ callPackage, path }:
+{ callPackage, unstable }:
 let
-  # Inside the overlay, `vencord` already refers to this package.
-  nixpkgs = callPackage (path + "/pkgs/by-name/ve/vencord/package.nix") { };
+  # Vesktop comes from unstable, so Vencord has to keep up with it.
+  nixpkgs = unstable.vencord;
 
   workspace = callPackage ./workspace.nix { inherit types; };
   types = callPackage ./types.nix { vencord = nixpkgs; };
