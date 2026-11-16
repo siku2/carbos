@@ -2,6 +2,7 @@ packages:
   - pkgs/vencord
   - pkgs/vencord/packages/*
   - pkgs/vencord/plugins/*
+  - pkgs/vesktop
 
 # Every package uses the same toolchain.
 catalog:

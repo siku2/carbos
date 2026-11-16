@@ -116,8 +116,7 @@ in
   };
 
   config = {
-    # Vencord comes from our overlay with the local plugins.
-    home.packages = [ (cfg.package.override { withSystemVencord = true; }) ];
+    home.packages = [ cfg.package ];
 
     # Read-only on purpose. Changes made in the app last until it restarts.
     xdg.configFile = lib.concatMapAttrs readOnly {

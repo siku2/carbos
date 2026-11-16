@@ -1,0 +1,9 @@
+{
+  "name": "carbos-vesktop",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "electron": "^45.2.3"
+  }
+}

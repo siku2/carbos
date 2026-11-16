@@ -32,6 +32,7 @@
         rust-analyzer
         secretspec
         teams
+        vesktop
         zed-editor
         ;
 
@@ -41,8 +42,5 @@
           final.unstable.atuin.overrideAttrs { doCheck = false; }
         else
           final.unstable.atuin;
-
-      # Ours carries the local plugins.
-      vesktop = final.unstable.vesktop.override { inherit (final) vencord; };
     };
 }
