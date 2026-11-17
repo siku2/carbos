@@ -12,6 +12,7 @@ let
       systemd
       uhubctl
       usbutils
+      wireshark-cli
       zstd
     ];
     text = ''
@@ -40,13 +41,20 @@ let
         echo 'file drivers/usb/core/hub.c -p' >"$dyndbg"
         snapshot after
         journalctl -k --since "$since" >"$dir/kernel.txt"
-        zstd -q --rm "$dir/usbmon-bus1.txt"
+        zstd -q --rm "$dir/usbmon-bus1.pcapng"
       }
 
       modprobe usbmon
       echo 'file drivers/usb/core/hub.c +p' >"$dyndbg"
-      head -c 200M /sys/kernel/debug/usb/usbmon/1u >"$dir/usbmon-bus1.txt" &
+      # The binary interface keeps a 1 MiB ring while userspace is frozen.
+      # The text one drops everything past about 100 events.
+      dumpcap -q -i usbmon1 -B 1 -s 256 -a filesize:204800 \
+        -w "$dir/usbmon-bus1.pcapng" &
       mon=$!
+      for _ in $(seq 50); do
+        [ -s "$dir/usbmon-bus1.pcapng" ] && break
+        sleep 0.1
+      done
       trap cleanup EXIT
       trap 'exit 143' TERM INT
       snapshot before
