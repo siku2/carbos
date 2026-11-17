@@ -20,6 +20,10 @@ _: {
     ];
 
     kernelModules = [ "kvm-amd" ];
+
+    # The SSL 2 MkII drops off the dock and its port reports over-current,
+    # which hub.c only logs at debug level.
+    kernelParams = [ ''dyndbg="file drivers/usb/core/hub.c format over-current +p"'' ];
   };
 
   carbos.kernel = {

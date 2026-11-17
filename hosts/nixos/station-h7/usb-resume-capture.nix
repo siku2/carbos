@@ -39,6 +39,7 @@ let
         kill "$mon" 2>/dev/null || true
         wait "$mon" || true
         echo 'file drivers/usb/core/hub.c -p' >"$dyndbg"
+        echo 'file drivers/usb/core/hub.c format over-current +p' >"$dyndbg"
         snapshot after
         journalctl -k --since "$since" >"$dir/kernel.txt"
         zstd -q --rm "$dir/usbmon-bus1.pcapng"
