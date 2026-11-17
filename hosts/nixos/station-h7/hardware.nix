@@ -63,4 +63,8 @@ _: {
   # When S3 aborts, systemd falls back to s2idle, which this board never
   # leaves on its own.
   systemd.sleep.settings.Sleep.SuspendState = "mem";
+
+  # Suspend has hung with the screen frozen and nothing in the journal. A
+  # blocked suspend now panics, so the stack ends up in pstore.
+  boot.kernel.sysctl."kernel.hung_task_panic" = 1;
 }
