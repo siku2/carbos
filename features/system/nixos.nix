@@ -12,6 +12,8 @@
     # A hard lockup panics and reboots. systemd-pstore keeps the log.
     "nmi_watchdog=panic"
     "panic=10"
+    # Some kernels, CachyOS among them, ship efi_pstore disabled.
+    "efi_pstore.pstore_disable=0"
   ];
 
   boot.kernel.sysctl."kernel.sysrq" = 1;
