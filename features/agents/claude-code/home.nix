@@ -1,10 +1,22 @@
 {
+  config,
   inputs,
   lib,
   pkgs,
   ...
 }:
 let
+  # Claude watches the resolved settings file's parent.
+  # See: https://github.com/anthropics/claude-code/issues/86935
+  settingsDir = pkgs.writeTextDir "settings.json" (
+    builtins.toJSON (
+      config.programs.claude-code.settings
+      // {
+        "$schema" = "https://json.schemastore.org/claude-code-settings.json";
+      }
+    )
+  );
+
   marketplace = lib.importJSON "${inputs.claude-plugins-official}/.claude-plugin/marketplace.json";
 
   # Some marketplace plugins keep their manifest in marketplace.json and
@@ -71,6 +83,9 @@ let
   };
 in
 {
+  home.file."${config.programs.claude-code.configDir}/settings.json".source =
+    lib.mkForce "${settingsDir}/settings.json";
+
   programs.claude-code = {
     enable = true;
     package = claudeCodeAllowingBypass;
