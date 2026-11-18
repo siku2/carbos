@@ -1,0 +1,27 @@
+diff --git i/src/launcher/src/cheatFile.cpp w/src/launcher/src/cheatFile.cpp
+index 60ccb911..018063d7 100644
+--- i/src/launcher/src/cheatFile.cpp
++++ w/src/launcher/src/cheatFile.cpp
+@@ -121,8 +121,7 @@ QString PlanPath(const QString& title_id) {
+ 	if (!IsSupportedTitleId(title_id)) {
+ 		return {};
+ 	}
+-	return QDir(QCoreApplication::applicationDirPath())
+-	    .filePath(QStringLiteral("_Patches/%1.json").arg(title_id.trimmed().toUpper()));
++	return QDir::current().filePath(QStringLiteral("_Patches/%1.json").arg(title_id.trimmed().toUpper()));
+ }
+ 
+ QString ParseDocument(const QByteArray& data, QJsonDocument* document) {
+diff --git i/src/launcher/src/mainDialog.cpp w/src/launcher/src/mainDialog.cpp
+index 7430b31e..3a6f7cec 100644
+--- i/src/launcher/src/mainDialog.cpp
++++ w/src/launcher/src/mainDialog.cpp
+@@ -450,7 +450,7 @@ void MainDialog::RunInterpreter(QProcess* process, const Configuration& info, bo
+ 	process->setNativeArguments(
+ 	    CmdCommand(QDir::toNativeSeparators(interpreter), args, close_terminal));
+ #endif
+-	process->setWorkingDirectory(QFileInfo(interpreter).absolutePath());
++	process->setWorkingDirectory(QDir::currentPath());
+ #if defined(_WIN32)
+ 	process->setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments* args) {
+ 		args->flags |= static_cast<uint32_t>(CREATE_NEW_CONSOLE);

@@ -1,0 +1,17 @@
+diff --git i/3rdparty/CMakeLists.txt w/3rdparty/CMakeLists.txt
+index e687029b..bcd9045f 100644
+--- i/3rdparty/CMakeLists.txt
++++ w/3rdparty/CMakeLists.txt
+@@ -218,8 +218,10 @@ if (NOT TARGET FFmpeg::ffmpeg)
+ 	else()
+ 		set(ARCHITECTURE x86_64)
+ 	endif()
+-	add_subdirectory(ffmpeg-core)
+-	add_library(FFmpeg::ffmpeg ALIAS ffmpeg)
++	find_package(PkgConfig REQUIRED)
++	pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET GLOBAL
++		libavformat libavcodec libswscale libavutil libavfilter libswresample)
++	add_library(FFmpeg::ffmpeg ALIAS PkgConfig::FFMPEG)
+ endif()
+ 
+ file(GLOB LIBATRAC9_SOURCES LibAtrac9/C/src/*.c)

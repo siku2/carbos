@@ -1,0 +1,24 @@
+diff --git i/src/graphics/host_gpu/renderer/pipeline/pipelineSerialization.cpp w/src/graphics/host_gpu/renderer/pipeline/pipelineSerialization.cpp
+index 0fccf60e..fdfbc8a1 100644
+--- i/src/graphics/host_gpu/renderer/pipeline/pipelineSerialization.cpp
++++ w/src/graphics/host_gpu/renderer/pipeline/pipelineSerialization.cpp
+@@ -43,6 +43,11 @@ struct Frame {
+ 
+ // Changes with every build, so records never meet code that encodes them differently. Zero when
+ // the executable cannot be found.
++#if defined(KYTY_BUILD_STAMP)
++uint64_t BuildStamp() {
++	return KYTY_BUILD_STAMP;
++}
++#else
+ uint64_t BuildStamp() {
+ #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+ 	std::array<wchar_t, 32768> name {};
+@@ -60,6 +65,7 @@ uint64_t BuildStamp() {
+ 	const auto      time = std::filesystem::last_write_time(path, error).time_since_epoch().count();
+ 	return error ? 0 : static_cast<uint64_t>(time);
+ }
++#endif
+ 
+ // What every record depends on besides its own fields; empty when the build is unknown.
+ std::vector<uint8_t> StoreHeader(const GraphicContext& graphics) {
