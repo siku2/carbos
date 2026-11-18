@@ -21,8 +21,8 @@ _: {
 
     kernelModules = [ "kvm-amd" ];
 
-    # The SSL 2 MkII drops off the dock and its port reports over-current,
-    # which hub.c only logs at debug level.
+    # hub.c only logs port over-current at debug level. The SSL 2 MkII's
+    # start-up current trips it on the dock's Terminus hub.
     kernelParams = [ ''dyndbg="file drivers/usb/core/hub.c format over-current +p"'' ];
   };
 
