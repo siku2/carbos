@@ -12,7 +12,6 @@
     ./firmware.nix
     ./gaming.nix
     ./hardware.nix
-    ./usb-resume-capture.nix
   ]
   ++ (with inputs.self.modules.nixos; [
     agents
