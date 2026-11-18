@@ -23,13 +23,13 @@
     dev
     firefox
     firmware
+    gaming
     git
     kernel
     kicad
     mic
     nix
     remote
-    rlbot
     shell
     system
     vault

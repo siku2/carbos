@@ -1,14 +1,5 @@
-{ config, pkgs, ... }:
+{ config, ... }:
 {
-  programs.steam = {
-    enable = true;
-    protontricks.enable = true;
-    extraCompatPackages = [ pkgs.proton-cachyos ];
-  };
-
-  programs.gamescope.enable = true;
-  programs.gamemode.enable = true;
-
   carbos.kernel.drivers.xone.enable = true;
 
   # xone turns on remote wakeup at probe, which can abort a suspend.
@@ -41,10 +32,4 @@
       gpus."1002:744C-1043:0506-0000:03:00.0".pmfw_options.zero_rpm_threshold = 65;
     };
   };
-
-  environment.systemPackages = with pkgs; [
-    kytyps5
-    mangohud
-    prismlauncher
-  ];
 }
