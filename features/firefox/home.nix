@@ -99,6 +99,20 @@ in
         base = "https://vault.bg12.ch";
       };
 
+      "3rdparty".Extensions."uBlock0@raymondhill.net".toOverwrite.filterLists = [
+        "user-filters"
+        "ublock-filters"
+        "ublock-badware"
+        "ublock-privacy"
+        "ublock-unbreak"
+        "ublock-quick-fixes"
+        "easylist"
+        "easyprivacy"
+        "urlhaus-1"
+        "plowe-0"
+        "adguard-spyware-url"
+      ];
+
       # Names as they ship for en-US in region CH.
       SearchEngines = {
         Default = "DuckDuckGo";
