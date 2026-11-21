@@ -95,9 +95,8 @@ impl<'a> Bridge<'a> {
 
     /// Reads server replies and completes the matching URBs.
     fn downstream(&self, rx: &mut TcpStream) -> Result<()> {
-        let legacy = self.device.magic == 0x2988;
         loop {
-            let h = match ReplyHeader::read(rx, legacy) {
+            let h = match ReplyHeader::read(rx) {
                 Ok(h) => h,
                 Err(_) if self.stop.load(Ordering::Relaxed) => return Ok(()),
                 Err(e) => return Err(Error::ServerSocket(e)),
@@ -152,7 +151,7 @@ impl<'a> Bridge<'a> {
                 return Ok(());
             }
             status::RETRY => {
-                let bytes = p.request.bytes().to_vec();
+                let bytes = p.request.encode();
                 drop(state);
                 thread::sleep(RETRY_DELAY);
                 return self.send(&bytes);
@@ -243,7 +242,7 @@ impl<'a> Bridge<'a> {
             "submit usbip {} -> seq {seq} ep {:#04x} in {} len {} setup {:02x?}",
             s.seqnum, s.ep, s.dir_in, s.buffer_length, s.setup
         ));
-        let bytes = request.bytes().to_vec();
+        let bytes = request.encode();
         state.by_usbip.insert(s.seqnum, seq);
         state.slots.insert(
             seq,

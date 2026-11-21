@@ -3,7 +3,10 @@ name = "sxlink"
 version = "0.1.0"
 edition = "2024"
 
-[dependencies]
+[dependencies.zerocopy]
+version = "0.8.64"
+default-features = false
+features = ["derive"]
 
 [profile.release]
 lto = true

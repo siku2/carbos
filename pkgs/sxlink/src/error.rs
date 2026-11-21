@@ -1,7 +1,7 @@
 use std::error;
 use std::fmt;
 use std::io;
-use std::net::Ipv4Addr;
+use std::net::IpAddr;
 use std::path::PathBuf;
 
 use crate::jcp::Verdict;
@@ -12,7 +12,7 @@ pub(crate) enum Error {
         port: String,
     },
     DeviceBusy {
-        owner: Ipv4Addr,
+        owner: IpAddr,
         port: String,
     },
     Encrypted {
@@ -26,6 +26,7 @@ pub(crate) enum Error {
         command: &'static str,
     },
     JcpBadSearchReply,
+    JcpIpv6NotImplemented,
     JcpRejected {
         command: &'static str,
         verdict: Verdict,
@@ -37,6 +38,7 @@ pub(crate) enum Error {
     JcpTimeout {
         command: &'static str,
     },
+    LegacyServer,
     MultiSession {
         count: u8,
     },
@@ -76,12 +78,14 @@ impl fmt::Display for Error {
             Self::JcpBadDeviceList => write!(f, "malformed device list"),
             Self::JcpBadOffset { command } => write!(f, "reply to {command:?} out of order"),
             Self::JcpBadSearchReply => write!(f, "malformed search reply"),
+            Self::JcpIpv6NotImplemented => write!(f, "JCP over IPv6 is not implemented yet"),
             Self::JcpRejected { command, verdict } => {
                 write!(f, "server answered {verdict:?} to {command:?}")
             }
             Self::JcpShortReply { command } => write!(f, "short reply to {command:?}"),
             Self::JcpSocket(_) => write!(f, "JCP socket"),
             Self::JcpTimeout { command } => write!(f, "no reply to {command:?}"),
+            Self::LegacyServer => write!(f, "server uses the legacy SXUPTP header, not supported"),
             Self::MultiSession { count } => {
                 write!(f, "device needs {count} sessions, only 1 is supported yet")
             }

@@ -19,7 +19,7 @@ mod usbip;
 mod vhci;
 
 use std::error::Error as _;
-use std::net::{Ipv4Addr, TcpStream};
+use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
 use std::process::ExitCode;
@@ -35,15 +35,15 @@ const USAGE: &str = "usage: sxlink [-v] list <server>
 enum Action {
     Attach {
         selector: String,
-        server: Ipv4Addr,
+        server: IpAddr,
         take: bool,
     },
     List {
-        server: Ipv4Addr,
+        server: IpAddr,
     },
     Release {
         selector: String,
-        server: Ipv4Addr,
+        server: IpAddr,
     },
 }
 
@@ -87,7 +87,7 @@ impl Action {
     }
 }
 
-fn attach(server: Ipv4Addr, selector: &str, take: bool) -> Result<()> {
+fn attach(server: IpAddr, selector: &str, take: bool) -> Result<()> {
     let client = Client::new(server)?;
     let device = client.find(selector)?;
     if !device.present {
@@ -115,7 +115,9 @@ fn attach(server: Ipv4Addr, selector: &str, take: bool) -> Result<()> {
     if n.sessions > 1 {
         return Err(Error::MultiSession { count: n.sessions });
     }
-    let tcp = TcpStream::connect((n.server, n.tcp_port)).map_err(Error::ServerConnect)?;
+    let host = n.server.map_or(client.server(), IpAddr::V4);
+    let tcp =
+        TcpStream::connect(SocketAddr::new(host, n.tcp_port)).map_err(Error::ServerConnect)?;
     tcp.set_nodelay(true).map_err(Error::ServerConnect)?;
 
     let (ours, kernel) = UnixStream::pair().map_err(Error::VhciSocket)?;
@@ -136,7 +138,7 @@ fn attach(server: Ipv4Addr, selector: &str, take: bool) -> Result<()> {
     result
 }
 
-fn list(server: Ipv4Addr) -> Result<()> {
+fn list(server: IpAddr) -> Result<()> {
     let client = Client::new(server)?;
     println!(
         "{:<12} {:<9} {:<10} {:<16} {:<16} NAME",
@@ -177,7 +179,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn release(server: Ipv4Addr, selector: &str) -> Result<()> {
+fn release(server: IpAddr, selector: &str) -> Result<()> {
     let client = Client::new(server)?;
     let device = client.find(selector)?;
     match device.owner {

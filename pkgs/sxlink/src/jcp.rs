@@ -4,8 +4,11 @@
 //! with their binary arguments appended directly after the text.
 
 use std::io;
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
 use std::time::{Duration, Instant};
+
+use zerocopy::byteorder::{BE, U16};
+use zerocopy::{FromBytes, FromZeros, Immutable, IntoBytes, KnownLayout, Unaligned};
 
 use crate::error::{Error, Result};
 use crate::sxuptp::Notification;
@@ -15,7 +18,6 @@ pub(crate) const PORT: u16 = 19541;
 const CMD_CONNECT: &str = "EXEC SCANNER CONNECT:";
 const CMD_DISCONNECT: &str = "EXEC SCANNER DISCONNECT:";
 const CMD_LIST: &str = "GET USB_DEVICE_LIST_EX";
-const HEADER_LEN: usize = 0x58;
 const MAX_CHUNK: u16 = 0x200;
 const RULE: u16 = 0x9506;
 const TEXT_LEN: usize = 0x50;
@@ -31,6 +33,43 @@ enum Kind {
     Search = 4,
 }
 
+/// The header of every request.
+#[repr(C)]
+#[derive(FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned)]
+struct RequestHeader {
+    kind: U16<BE>,
+    /// The search rule for searches, the session (1) for commands.
+    session: U16<BE>,
+    /// Command text with its arguments appended, zero padded.
+    text: [u8; TEXT_LEN],
+    offset: U16<BE>,
+    length: U16<BE>,
+}
+
+/// The start of a search reply.
+#[repr(C)]
+#[derive(FromBytes, Immutable, KnownLayout, Unaligned)]
+struct SearchReply {
+    kind: U16<BE>,
+    rule: U16<BE>,
+    reserved1: [u8; 0x20],
+    model: [u8; 0x14],
+    mac: [u8; 6],
+    reserved2: [u8; 2],
+    flags: U16<BE>,
+    ipv4: [u8; 4],
+}
+
+/// The header of every command reply chunk.
+#[repr(C)]
+#[derive(FromBytes, Immutable, KnownLayout, Unaligned)]
+struct ChunkHeader {
+    kind: U16<BE>,
+    more: U16<BE>,
+    offset: U16<BE>,
+    length: U16<BE>,
+}
+
 /// The verdict a server puts at the start of a command reply.
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Verdict {
@@ -38,30 +77,35 @@ pub(crate) enum Verdict {
     Ng,
 }
 
+impl Verdict {
+    fn of(reply: &[u8]) -> Option<Self> {
+        let mut head = [0; 4];
+        let n = reply.len().min(4);
+        head[..n].copy_from_slice(&reply[..n]);
+        head.make_ascii_lowercase();
+        match &head {
+            [b'e', b'r', ..] | [b'n', b'g', ..] => Some(Self::Ng),
+            [b'd', b'n', ..] | b"deny" => Some(Self::Deny),
+            _ => None,
+        }
+    }
+}
+
 /// A connection to the JCP port of one server.
 pub(crate) struct Client {
-    local: Ipv4Addr,
+    local: IpAddr,
     mac: [u8; 6],
-    server: SocketAddrV4,
+    server: SocketAddr,
     sock: UdpSocket,
 }
 
-/// One USB port of a server, as reported by the device list.
-pub(crate) struct Device {
-    pub(crate) location: String,
-    pub(crate) name: String,
-    pub(crate) owner: Option<Ipv4Addr>,
-    pub(crate) pid: u16,
-    pub(crate) port: String,
-    pub(crate) present: bool,
-    pub(crate) serial: String,
-    pub(crate) vid: u16,
-}
-
 impl Client {
-    pub(crate) fn new(server: Ipv4Addr) -> Result<Self> {
-        let server = SocketAddrV4::new(server, PORT);
-        let sock = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).map_err(Error::JcpSocket)?;
+    pub(crate) fn new(server: IpAddr) -> Result<Self> {
+        if server.is_ipv6() {
+            return Err(Error::JcpIpv6NotImplemented);
+        }
+        let server = SocketAddr::new(server, PORT);
+        let sock = UdpSocket::bind(unspecified(server)).map_err(Error::JcpSocket)?;
         sock.set_read_timeout(Some(TIMEOUT))
             .map_err(Error::JcpSocket)?;
         let local = local_addr_towards(server)?;
@@ -77,27 +121,26 @@ impl Client {
 
     /// Reserves the device on `port` and waits for its notification.
     pub(crate) fn connect(&self, port: &str) -> Result<Notification> {
-        let notify = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, crate::sxuptp::PORT))
-            .map_err(Error::NotifySocket)?;
-        let mut args = self.prefix(self.local);
+        let notify = Notification::bind()?;
+        let mut args = self.prefix(self.local)?;
         args.extend_from_slice(port.as_bytes());
         args.push(0);
         args.extend_from_slice(&crate::sxuptp::PORT.to_be_bytes());
         args.push(0);
         self.command(CMD_CONNECT, &args, Some(&[0]))?;
-        Notification::receive(&notify, *self.server.ip())
-    }
-
-    /// Releases the reservation `owner` holds on `port`.
-    pub(crate) fn disconnect(&self, port: &str, owner: Ipv4Addr) -> Result<()> {
-        let mut args = self.prefix(owner);
-        args.extend_from_slice(port.as_bytes());
-        self.command(CMD_DISCONNECT, &args, None).map(drop)
+        Notification::receive(&notify, self.server.ip())
     }
 
     pub(crate) fn devices(&self) -> Result<Vec<Device>> {
         let buf = self.command(CMD_LIST, &[], None)?;
         Device::parse_list(&buf)
+    }
+
+    /// Releases the reservation `owner` holds on `port`.
+    pub(crate) fn disconnect(&self, port: &str, owner: IpAddr) -> Result<()> {
+        let mut args = self.prefix(owner)?;
+        args.extend_from_slice(port.as_bytes());
+        self.command(CMD_DISCONNECT, &args, None).map(drop)
     }
 
     /// The device on the port or with the serial number `selector`.
@@ -110,51 +153,57 @@ impl Client {
             })
     }
 
-    pub(crate) fn local(&self) -> Ipv4Addr {
+    pub(crate) fn local(&self) -> IpAddr {
         self.local
+    }
+
+    pub(crate) fn server(&self) -> IpAddr {
+        self.server.ip()
     }
 
     /// Runs one command with the stop-and-wait chunk exchange.
     fn command(&self, text: &'static str, args: &[u8], data: Option<&[u8]>) -> Result<Vec<u8>> {
-        let mut cmd = Vec::with_capacity(TEXT_LEN);
-        cmd.extend_from_slice(text.as_bytes());
-        cmd.extend_from_slice(args);
-        if cmd.len() > TEXT_LEN {
+        let mut header = RequestHeader::new_zeroed();
+        let n = text.len() + args.len();
+        if n > TEXT_LEN {
             return Err(Error::JcpArgsTooLong { command: text });
         }
-        cmd.resize(TEXT_LEN, 0);
+        header.text[..text.len()].copy_from_slice(text.as_bytes());
+        header.text[text.len()..n].copy_from_slice(args);
+        header.session.set(1);
 
-        let request = |kind: Kind, offset: u16, length: u16, payload: &[u8]| {
-            let mut p = Vec::with_capacity(HEADER_LEN + payload.len());
-            p.extend_from_slice(&(kind as u16).to_be_bytes());
-            p.extend_from_slice(&1u16.to_be_bytes());
-            p.extend_from_slice(&cmd);
-            p.extend_from_slice(&offset.to_be_bytes());
-            p.extend_from_slice(&length.to_be_bytes());
+        let mut request = |kind: Kind, offset: usize, payload: &[u8]| {
+            header.kind.set(kind as u16);
+            header.offset.set(offset as u16);
+            header.length.set(if payload.is_empty() {
+                MAX_CHUNK
+            } else {
+                payload.len() as u16
+            });
+            let mut p = header.as_bytes().to_vec();
             p.extend_from_slice(payload);
             p
         };
 
-        let first = match data {
-            Some(d) => request(Kind::Command, 0, d.len() as u16, d),
-            None => request(Kind::Command, 0, MAX_CHUNK, &[]),
-        };
+        let first = request(Kind::Command, 0, data.unwrap_or_default());
         let mut out = Vec::new();
         let mut reply = self.exchange(&first, text)?;
         loop {
-            let chunk = Chunk::parse(&reply, text)?;
-            if usize::from(chunk.offset) != out.len() {
+            let (chunk, rest) = ChunkHeader::ref_from_prefix(&reply)
+                .map_err(|_| Error::JcpShortReply { command: text })?;
+            let data = rest
+                .get(..usize::from(chunk.length.get()))
+                .ok_or(Error::JcpShortReply { command: text })?;
+            if usize::from(chunk.offset.get()) != out.len() {
                 return Err(Error::JcpBadOffset { command: text });
             }
-            out.extend_from_slice(chunk.data);
-            if !chunk.more {
+            out.extend_from_slice(data);
+            if chunk.more.get() == 0 {
                 break;
             }
-            let next = request(Kind::Next, out.len() as u16, MAX_CHUNK, &[]);
-            reply = self.exchange(&next, text)?;
+            reply = self.exchange(&request(Kind::Next, out.len(), &[]), text)?;
         }
-        let end = request(Kind::End, out.len() as u16, MAX_CHUNK, &[]);
-        self.exchange(&end, text)?;
+        self.exchange(&request(Kind::End, out.len(), &[]), text)?;
 
         match Verdict::of(&out) {
             Some(verdict) => Err(Error::JcpRejected {
@@ -175,7 +224,7 @@ impl Client {
             let deadline = Instant::now() + TIMEOUT;
             while Instant::now() < deadline {
                 match self.sock.recv_from(&mut buf) {
-                    Ok((n, SocketAddr::V4(src))) if src == self.server => {
+                    Ok((n, src)) if src == self.server => {
                         buf.truncate(n);
                         return Ok(buf);
                     }
@@ -189,36 +238,48 @@ impl Client {
     }
 
     /// The 12 byte prefix: tag 1, the server MAC and a client address.
-    fn prefix(&self, client: Ipv4Addr) -> Vec<u8> {
+    fn prefix(&self, client: IpAddr) -> Result<Vec<u8>> {
+        let IpAddr::V4(client) = client else {
+            return Err(Error::JcpIpv6NotImplemented);
+        };
         let mut p = vec![1, 6];
         p.extend_from_slice(&self.mac);
         p.extend_from_slice(&client.octets());
-        p
+        Ok(p)
     }
 
     /// Sends a search and returns the server MAC.
     fn search(&self) -> Result<[u8; 6]> {
-        let mut req = vec![0; HEADER_LEN];
-        req[0..2].copy_from_slice(&(Kind::Search as u16).to_be_bytes());
-        req[2..4].copy_from_slice(&RULE.to_be_bytes());
-        let reply = self.exchange(&req, "search")?;
-        if reply.len() < 0x46 || reply[0..2] != [0, 2] || reply[2..4] != RULE.to_be_bytes() {
+        let mut req = RequestHeader::new_zeroed();
+        req.kind.set(Kind::Search as u16);
+        req.session.set(RULE);
+        let reply = self.exchange(req.as_bytes(), "search")?;
+        let (r, _) = SearchReply::ref_from_prefix(&reply).map_err(|_| Error::JcpBadSearchReply)?;
+        if r.kind.get() != 2 || r.rule.get() != RULE {
             return Err(Error::JcpBadSearchReply);
         }
-        let mut mac = [0; 6];
-        mac.copy_from_slice(&reply[0x38..0x3e]);
-        Ok(mac)
+        Ok(r.mac)
     }
 }
 
+/// One USB port of a server, as reported by the device list.
+pub(crate) struct Device {
+    pub(crate) location: String,
+    pub(crate) name: String,
+    pub(crate) owner: Option<IpAddr>,
+    pub(crate) pid: u16,
+    pub(crate) port: String,
+    pub(crate) present: bool,
+    pub(crate) serial: String,
+    pub(crate) vid: u16,
+}
+
 impl Device {
-    /// Parses a `GET USB_DEVICE_LIST_EX` reply.
-    fn parse_list(buf: &[u8]) -> Result<Vec<Self>> {
-        let mut r = Reader { buf, pos: 0 };
-        let count = r.u8()?;
-        (0..count).map(|_| Self::parse_ex(&mut r)).collect()
+    pub(crate) fn matches(&self, selector: &str) -> bool {
+        self.port == selector || (!self.serial.is_empty() && self.serial == selector)
     }
 
+    /// Parses one `GET USB_DEVICE_LIST_EX` record.
     fn parse_ex(r: &mut Reader<'_>) -> Result<Self> {
         let port = r.cstr()?;
         let name = r.cstr()?.trim_end_matches(['\r', '\n']).to_owned();
@@ -234,7 +295,7 @@ impl Device {
         Ok(Self {
             location,
             name,
-            owner: (!owner.is_unspecified()).then_some(owner),
+            owner: (!owner.is_unspecified()).then_some(IpAddr::V4(owner)),
             pid,
             port,
             present: status & 0x100 != 0,
@@ -243,45 +304,15 @@ impl Device {
         })
     }
 
-    pub(crate) fn matches(&self, selector: &str) -> bool {
-        self.port == selector || (!self.serial.is_empty() && self.serial == selector)
+    /// Parses a `GET USB_DEVICE_LIST_EX` reply.
+    fn parse_list(buf: &[u8]) -> Result<Vec<Self>> {
+        let mut r = Reader { buf, pos: 0 };
+        let count = r.u8()?;
+        (0..count).map(|_| Self::parse_ex(&mut r)).collect()
     }
 }
 
-impl Verdict {
-    fn of(reply: &[u8]) -> Option<Self> {
-        let head: Vec<u8> = reply.iter().take(4).map(u8::to_ascii_lowercase).collect();
-        if head.starts_with(b"er") || head.starts_with(b"ng") {
-            Some(Self::Ng)
-        } else if head.starts_with(b"dn") || head.starts_with(b"deny") {
-            Some(Self::Deny)
-        } else {
-            None
-        }
-    }
-}
-
-struct Chunk<'a> {
-    data: &'a [u8],
-    more: bool,
-    offset: u16,
-}
-
-impl<'a> Chunk<'a> {
-    fn parse(reply: &'a [u8], command: &'static str) -> Result<Self> {
-        if reply.len() < 8 {
-            return Err(Error::JcpShortReply { command });
-        }
-        let more = u16::from_be_bytes([reply[2], reply[3]]) != 0;
-        let offset = u16::from_be_bytes([reply[4], reply[5]]);
-        let length = usize::from(u16::from_be_bytes([reply[6], reply[7]]));
-        let data = reply
-            .get(8..8 + length)
-            .ok_or(Error::JcpShortReply { command })?;
-        Ok(Self { data, more, offset })
-    }
-}
-
+/// A cursor over a device list reply.
 struct Reader<'a> {
     buf: &'a [u8],
     pos: usize,
@@ -289,12 +320,7 @@ struct Reader<'a> {
 
 impl Reader<'_> {
     fn array<const N: usize>(&mut self) -> Result<[u8; N]> {
-        let bytes = self
-            .buf
-            .get(self.pos..self.pos + N)
-            .ok_or(Error::JcpBadDeviceList)?;
-        self.pos += N;
-        Ok(bytes.try_into().expect("slice has length N"))
+        Ok(self.array_slice(N)?.try_into().expect("slice has length N"))
     }
 
     fn cstr(&mut self) -> Result<String> {
@@ -308,11 +334,16 @@ impl Reader<'_> {
     }
 
     fn skip(&mut self, n: usize) -> Result<()> {
-        if self.pos + n > self.buf.len() {
-            return Err(Error::JcpBadDeviceList);
-        }
+        self.array_slice(n).map(drop)
+    }
+
+    fn array_slice(&mut self, n: usize) -> Result<&[u8]> {
+        let bytes = self
+            .buf
+            .get(self.pos..self.pos + n)
+            .ok_or(Error::JcpBadDeviceList)?;
         self.pos += n;
-        Ok(())
+        Ok(bytes)
     }
 
     fn u8(&mut self) -> Result<u8> {
@@ -333,11 +364,16 @@ pub(crate) fn is_timeout(e: &io::Error) -> bool {
 }
 
 /// The local address the kernel picks for traffic to `server`.
-fn local_addr_towards(server: SocketAddrV4) -> Result<Ipv4Addr> {
-    let sock = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).map_err(Error::JcpSocket)?;
+fn local_addr_towards(server: SocketAddr) -> Result<IpAddr> {
+    let sock = UdpSocket::bind(unspecified(server)).map_err(Error::JcpSocket)?;
     sock.connect(server).map_err(Error::JcpSocket)?;
-    match sock.local_addr().map_err(Error::JcpSocket)? {
-        SocketAddr::V4(a) => Ok(*a.ip()),
-        SocketAddr::V6(_) => Err(Error::JcpBadSearchReply),
+    Ok(sock.local_addr().map_err(Error::JcpSocket)?.ip())
+}
+
+/// The wildcard address of the same family as `addr`, port 0.
+fn unspecified(addr: SocketAddr) -> SocketAddr {
+    match addr {
+        SocketAddr::V4(_) => (Ipv4Addr::UNSPECIFIED, 0).into(),
+        SocketAddr::V6(_) => (Ipv6Addr::UNSPECIFIED, 0).into(),
     }
 }

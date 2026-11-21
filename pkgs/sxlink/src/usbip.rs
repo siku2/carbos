@@ -1,7 +1,8 @@
 //! The USB/IP data protocol that `vhci_hcd` speaks on its socket.
 //!
-//! Every PDU has a 48 byte big-endian header. See the kernel documentation
-//! in `Documentation/usb/usbip_protocol.rst`.
+//! Every PDU has a 48 byte big-endian header: a 20 byte basic part and a
+//! 28 byte command specific part. See `Documentation/usb/usbip_protocol.rst`
+//! in the kernel tree.
 
 /// Negative errno values used in replies.
 pub(crate) mod errno {
@@ -14,19 +15,100 @@ pub(crate) mod errno {
 
 use std::io::{self, Read, Write};
 
+use zerocopy::byteorder::{BE, I32, U32};
+use zerocopy::{FromBytes, FromZeros, Immutable, IntoBytes, KnownLayout, Unaligned};
+
 use crate::error::{Error, Result};
 
 const CMD_SUBMIT: u32 = 1;
 const CMD_UNLINK: u32 = 2;
-const HEADER_LEN: usize = 48;
 const ISO_DESC_LEN: usize = 16;
 const RET_SUBMIT: u32 = 3;
 const RET_UNLINK: u32 = 4;
+
+/// The common part of every PDU.
+#[repr(C)]
+#[derive(FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned)]
+struct Basic {
+    command: U32<BE>,
+    seqnum: U32<BE>,
+    devid: U32<BE>,
+    direction: U32<BE>,
+    ep: U32<BE>,
+}
+
+/// A whole 48 byte header with the command specific part still raw.
+#[repr(C)]
+#[derive(FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned)]
+struct Header {
+    basic: Basic,
+    body: [u8; 28],
+}
+
+#[repr(C)]
+#[derive(FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned)]
+struct CmdSubmit {
+    transfer_flags: U32<BE>,
+    transfer_buffer_length: U32<BE>,
+    start_frame: I32<BE>,
+    number_of_packets: U32<BE>,
+    interval: I32<BE>,
+    setup: [u8; 8],
+}
+
+#[repr(C)]
+#[derive(FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned)]
+struct CmdUnlink {
+    unlink_seqnum: U32<BE>,
+    padding: [u8; 24],
+}
+
+#[repr(C)]
+#[derive(FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned)]
+struct RetSubmit {
+    status: I32<BE>,
+    actual_length: U32<BE>,
+    start_frame: I32<BE>,
+    number_of_packets: I32<BE>,
+    error_count: I32<BE>,
+    padding: [u8; 8],
+}
+
+#[repr(C)]
+#[derive(FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned)]
+struct RetUnlink {
+    status: I32<BE>,
+    padding: [u8; 24],
+}
 
 /// A command from `vhci_hcd`.
 pub(crate) enum Command {
     Submit(Submit),
     Unlink { seqnum: u32, target: u32 },
+}
+
+impl Command {
+    /// Reads one command. Returns `None` on end of stream.
+    pub(crate) fn read(r: &mut impl Read) -> Result<Option<Self>> {
+        let mut h = Header::new_zeroed();
+        match r.read_exact(h.as_mut_bytes()) {
+            Ok(()) => {}
+            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => return Ok(None),
+            Err(e) => return Err(Error::VhciSocket(e)),
+        }
+        let seqnum = h.basic.seqnum.get();
+        match h.basic.command.get() {
+            CMD_SUBMIT => Submit::read(r, &h).map(|s| Some(Self::Submit(s))),
+            CMD_UNLINK => {
+                let body = CmdUnlink::ref_from_bytes(&h.body).expect("body is 28 bytes");
+                Ok(Some(Self::Unlink {
+                    seqnum,
+                    target: body.unlink_seqnum.get(),
+                }))
+            }
+            other => Err(Error::UsbipUnknownCommand(other)),
+        }
+    }
 }
 
 pub(crate) struct Submit {
@@ -39,49 +121,32 @@ pub(crate) struct Submit {
     pub(crate) setup: [u8; 8],
 }
 
-impl Command {
-    /// Reads one command. Returns `None` on end of stream.
-    pub(crate) fn read(r: &mut impl Read) -> Result<Option<Self>> {
-        let mut h = [0; HEADER_LEN];
-        match r.read_exact(&mut h) {
-            Ok(()) => {}
-            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => return Ok(None),
-            Err(e) => return Err(Error::VhciSocket(e)),
+impl Submit {
+    /// Reads the OUT data and iso descriptors that follow the header.
+    fn read(r: &mut impl Read, h: &Header) -> Result<Self> {
+        let body = CmdSubmit::ref_from_bytes(&h.body).expect("body is 28 bytes");
+        let dir_in = h.basic.direction.get() == 1;
+        let buffer_length = body.transfer_buffer_length.get();
+        let iso_packets = match body.number_of_packets.get() {
+            u32::MAX => 0,
+            n => n,
+        };
+        let mut data = Vec::new();
+        if !dir_in {
+            data.resize(buffer_length as usize, 0);
+            r.read_exact(&mut data).map_err(Error::VhciSocket)?;
         }
-        let word = |i: usize| u32::from_be_bytes([h[i], h[i + 1], h[i + 2], h[i + 3]]);
-        let seqnum = word(4);
-        match word(0) {
-            CMD_SUBMIT => {
-                let dir_in = word(12) == 1;
-                let ep = word(16) as u8;
-                let buffer_length = word(24);
-                let packets = word(32);
-                let iso_packets = if packets == u32::MAX { 0 } else { packets };
-                let mut setup = [0; 8];
-                setup.copy_from_slice(&h[40..48]);
-                let mut data = Vec::new();
-                if !dir_in {
-                    data.resize(buffer_length as usize, 0);
-                    r.read_exact(&mut data).map_err(Error::VhciSocket)?;
-                }
-                let mut iso = vec![0; iso_packets as usize * ISO_DESC_LEN];
-                r.read_exact(&mut iso).map_err(Error::VhciSocket)?;
-                Ok(Some(Self::Submit(Submit {
-                    buffer_length,
-                    data,
-                    dir_in,
-                    ep,
-                    iso_packets,
-                    seqnum,
-                    setup,
-                })))
-            }
-            CMD_UNLINK => Ok(Some(Self::Unlink {
-                seqnum,
-                target: word(20),
-            })),
-            other => Err(Error::UsbipUnknownCommand(other)),
-        }
+        let mut iso = vec![0; iso_packets as usize * ISO_DESC_LEN];
+        r.read_exact(&mut iso).map_err(Error::VhciSocket)?;
+        Ok(Self {
+            buffer_length,
+            data,
+            dir_in,
+            ep: h.basic.ep.get() as u8,
+            iso_packets,
+            seqnum: h.basic.seqnum.get(),
+            setup: body.setup,
+        })
     }
 }
 
@@ -102,24 +167,37 @@ pub(crate) enum Reply<'a> {
 
 impl Reply<'_> {
     pub(crate) fn write(&self, w: &mut impl Write) -> io::Result<()> {
-        let mut h = [0; HEADER_LEN];
-        let (cmd, seqnum, status, data) = match *self {
+        let mut h = Header::new_zeroed();
+        let data = match *self {
             Self::Submit {
                 actual,
                 data,
                 seqnum,
                 status,
             } => {
-                h[24..28].copy_from_slice(&actual.to_be_bytes());
-                (RET_SUBMIT, seqnum, status, data)
+                h.basic.command.set(RET_SUBMIT);
+                h.basic.seqnum.set(seqnum);
+                let body = RetSubmit {
+                    status: status.into(),
+                    actual_length: actual.into(),
+                    ..RetSubmit::new_zeroed()
+                };
+                h.body.copy_from_slice(body.as_bytes());
+                data
             }
-            Self::Unlink { seqnum, status } => (RET_UNLINK, seqnum, status, &[][..]),
+            Self::Unlink { seqnum, status } => {
+                h.basic.command.set(RET_UNLINK);
+                h.basic.seqnum.set(seqnum);
+                let body = RetUnlink {
+                    status: status.into(),
+                    ..RetUnlink::new_zeroed()
+                };
+                h.body.copy_from_slice(body.as_bytes());
+                &[]
+            }
         };
-        h[0..4].copy_from_slice(&cmd.to_be_bytes());
-        h[4..8].copy_from_slice(&seqnum.to_be_bytes());
-        h[20..24].copy_from_slice(&status.to_be_bytes());
-        let mut pdu = Vec::with_capacity(HEADER_LEN + data.len());
-        pdu.extend_from_slice(&h);
+        let mut pdu = Vec::with_capacity(size_of::<Header>() + data.len());
+        pdu.extend_from_slice(h.as_bytes());
         pdu.extend_from_slice(data);
         w.write_all(&pdu)
     }
