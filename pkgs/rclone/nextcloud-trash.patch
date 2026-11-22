@@ -1,0 +1,1054 @@
+diff --git a/backend/webdav/api/types.go b/backend/webdav/api/types.go
+index 5ed3dfe..82f9490 100644
+--- a/backend/webdav/api/types.go
++++ b/backend/webdav/api/types.go
+@@ -77,6 +77,11 @@ type Prop struct {
+ 	Checksums    []string  `xml:"prop>checksums>checksum,omitempty"`
+ 	Permissions  string    `xml:"prop>permissions,omitempty"`
+ 	MESha1Hex    *string   `xml:"ME: prop>sha1hex,omitempty"` // Fastmail-specific sha1 checksum
++
++	// Nextcloud trash bin properties
++	TrashbinFilename         string `xml:"http://nextcloud.org/ns prop>trashbin-filename,omitempty"`
++	TrashbinOriginalLocation string `xml:"http://nextcloud.org/ns prop>trashbin-original-location,omitempty"`
++	TrashbinDeletionTime     int64  `xml:"http://nextcloud.org/ns prop>trashbin-deletion-time,omitempty"`
+ }
+ 
+ // Parse a status of the form "HTTP/1.1 200 OK" or "HTTP/1.1 200"
+diff --git a/backend/webdav/trash.go b/backend/webdav/trash.go
+new file mode 100644
+index 0000000..8bde1f1
+--- /dev/null
++++ b/backend/webdav/trash.go
+@@ -0,0 +1,859 @@
++package webdav
++
++// Serve a freedesktop.org trash directory from the Nextcloud trash bin.
++//
++// With nextcloud_trash_dir set to e.g. ".Trash-1000", the remote root
++// gets a virtual directory of that name with "files" and "info"
++// subdirectories, laid out as the trash specification expects. Its
++// contents come from the trash bin WebDAV endpoint, so file managers
++// that trash by renaming into this directory end up using the server
++// side trash bin:
++//
++//   - renaming into files/ deletes the source, which the server moves
++//     to its trash bin
++//   - listing files/ and info/ shows the trash bin
++//   - renaming out of files/ restores the item
++//   - deleting from files/, or renaming into expunged/ as gvfs does,
++//     deletes the item from the trash bin
++//
++// See https://specifications.freedesktop.org/trash-spec/latest/
++
++import (
++	"bytes"
++	"context"
++	"errors"
++	"fmt"
++	"io"
++	"net/http"
++	"net/url"
++	"path"
++	"sort"
++	"strings"
++	"sync"
++	"time"
++
++	"github.com/rclone/rclone/backend/webdav/api"
++	"github.com/rclone/rclone/fs"
++	"github.com/rclone/rclone/fs/hash"
++	"github.com/rclone/rclone/lib/encoder"
++	"github.com/rclone/rclone/lib/rest"
++)
++
++const (
++	trashFilesDir    = "files"
++	trashInfoDir     = "info"
++	trashExpunged    = "expunged"
++	trashInfoSuffix  = ".trashinfo"
++	trashListTTL     = 5 * time.Second
++	trashDateFormat  = "2006-01-02T15:04:05"
++	trashInfoMaxSize = 64 * 1024
++)
++
++var trashProps = []byte(`<?xml version="1.0"?>
++<d:propfind xmlns:d="DAV:" xmlns:nc="http://nextcloud.org/ns">
++ <d:prop>
++  <d:getlastmodified/>
++  <d:getcontentlength/>
++  <d:resourcetype/>
++  <nc:trashbin-filename/>
++  <nc:trashbin-original-location/>
++  <nc:trashbin-deletion-time/>
++ </d:prop>
++</d:propfind>
++`)
++
++// trashItem is one top level entry of the trash bin
++type trashItem struct {
++	id       string // name in the trash bin, e.g. "a.txt.d1700000000"
++	name     string // name under files/
++	orig     string // original location relative to the Fs root
++	deleted  time.Time
++	isDir    bool
++	size     int64
++	modified time.Time
++}
++
++// trash serves the virtual trash directory of an Fs
++type trash struct {
++	f       *Fs
++	dir     string // name of the trash directory in the Fs root
++	rootURL string // trash bin endpoint, ending in /
++	prefix  string // path of the Fs root below the user's files
++
++	mu      sync.Mutex
++	aliases map[string]string // trash bin id to the name a client gave it
++	items   []*trashItem
++	byName  map[string]*trashItem
++	byID    map[string]*trashItem
++	fetched time.Time
++}
++
++// newTrash sets up the trash for f from the files URL
++//
++// The URL must have the form .../remote.php/dav/files/<user>/[path]
++func newTrash(f *Fs, dir string) (*trash, error) {
++	if dir == "" || strings.Contains(dir, "/") {
++		return nil, fmt.Errorf("nextcloud_trash_dir %q must be a single path segment", dir)
++	}
++	if f.opt.Vendor != "nextcloud" {
++		return nil, errors.New("nextcloud_trash_dir needs vendor nextcloud")
++	}
++	const marker = "/remote.php/dav/files/"
++	i := strings.Index(f.endpoint.Path, marker)
++	if i < 0 {
++		return nil, fmt.Errorf("nextcloud_trash_dir needs a URL containing %q", marker)
++	}
++	user, sub, _ := strings.Cut(f.endpoint.Path[i+len(marker):], "/")
++	if user == "" {
++		return nil, errors.New("nextcloud_trash_dir: no user in URL")
++	}
++	u := *f.endpoint
++	u.Path = f.endpoint.Path[:i] + "/remote.php/dav/trashbin/" + user + "/"
++	u.RawPath = ""
++	return &trash{
++		f:       f,
++		dir:     dir,
++		rootURL: u.String(),
++		prefix:  strings.Trim(path.Join(strings.Trim(sub, "/"), f.root), "/"),
++	}, nil
++}
++
++// trashPathKind classifies a remote path
++type trashPathKind int
++
++const (
++	trashNone  trashPathKind = iota // not in the trash
++	trashRoot                       // the trash directory itself
++	trashFiles                      // files/
++	trashInfo                       // info/
++	trashItemP                      // files/<name>[/sub]
++	trashInfoP                      // info/<name>.trashinfo
++	trashExp                        // expunged/
++	trashExpP                       // expunged/<name>[/sub]
++	trashOther                      // anything else in the trash directory
++)
++
++// classify returns the kind of remote and the part below files/ or info/
++func (t *trash) classify(remote string) (trashPathKind, string) {
++	if t == nil {
++		return trashNone, ""
++	}
++	if remote == t.dir {
++		return trashRoot, ""
++	}
++	rest, ok := strings.CutPrefix(remote, t.dir+"/")
++	if !ok {
++		return trashNone, ""
++	}
++	switch {
++	case rest == trashFilesDir:
++		return trashFiles, ""
++	case rest == trashInfoDir:
++		return trashInfo, ""
++	case rest == trashExpunged:
++		return trashExp, ""
++	case strings.HasPrefix(rest, trashExpunged+"/"):
++		return trashExpP, rest[len(trashExpunged)+1:]
++	case strings.HasPrefix(rest, trashFilesDir+"/"):
++		return trashItemP, rest[len(trashFilesDir)+1:]
++	case strings.HasPrefix(rest, trashInfoDir+"/"):
++		return trashInfoP, rest[len(trashInfoDir)+1:]
++	}
++	return trashOther, rest
++}
++
++// in reports whether remote is inside the trash directory
++func (t *trash) in(remote string) bool {
++	kind, _ := t.classify(remote)
++	return kind != trashNone
++}
++
++func (t *trash) filesRemote(name string) string {
++	return path.Join(t.dir, trashFilesDir, name)
++}
++
++func (t *trash) infoRemote(name string) string {
++	return path.Join(t.dir, trashInfoDir, name+trashInfoSuffix)
++}
++
++// invalidate drops the cached listing
++func (t *trash) invalidate() {
++	t.mu.Lock()
++	t.fetched = time.Time{}
++	t.mu.Unlock()
++}
++
++// call runs a request against the trash bin endpoint
++func (t *trash) call(ctx context.Context, opts *rest.Opts) (resp *http.Response, err error) {
++	opts.RootURL = t.rootURL
++	err = t.f.pacer.Call(func() (bool, error) {
++		resp, err = t.f.srv.Call(ctx, opts)
++		return t.f.shouldRetry(ctx, resp, err)
++	})
++	return resp, err
++}
++
++// escape encodes a path below the trash bin endpoint
++func (t *trash) escape(p string) string {
++	if t.f.opt.Enc != encoder.EncodeZero {
++		p = t.f.opt.Enc.FromStandardPath(p)
++	}
++	return rest.URLPathEscapeAll(p)
++}
++
++// trashEntry is one entry of a trash bin PROPFIND
++type trashEntry struct {
++	name  string
++	isDir bool
++	props *api.Prop
++}
++
++// propfind lists the trash bin collection at p, e.g. "trash/" or
++// "trash/<id>/sub/"
++func (t *trash) propfind(ctx context.Context, p string) ([]trashEntry, error) {
++	opts := rest.Opts{
++		Method:       "PROPFIND",
++		Path:         p,
++		ExtraHeaders: map[string]string{"Depth": "1"},
++		Body:         bytes.NewBuffer(trashProps),
++	}
++	var result api.Multistatus
++	opts.RootURL = t.rootURL
++	err := t.f.pacer.Call(func() (bool, error) {
++		var attempt api.Multistatus
++		resp, err := t.f.callPropfind(ctx, &opts, &attempt)
++		if err == nil {
++			result = attempt
++		}
++		return t.f.shouldRetry(ctx, resp, err)
++	})
++	if apiErr, ok := err.(*api.Error); ok && apiErr.StatusCode == http.StatusNotFound {
++		return nil, fs.ErrorDirNotFound
++	}
++	if err != nil {
++		return nil, fmt.Errorf("trash bin PROPFIND failed: %w", err)
++	}
++	base, err := url.Parse(t.rootURL + p)
++	if err != nil {
++		return nil, err
++	}
++	basePath := addSlash(base.Path)
++	var entries []trashEntry
++	for i := range result.Responses {
++		item := &result.Responses[i]
++		u, err := rest.URLJoin(base, item.Href)
++		if err != nil {
++			continue
++		}
++		sub := strings.Trim(strings.TrimPrefix(addSlash(u.Path), basePath), "/")
++		if sub == "" || strings.Contains(sub, "/") || !item.Props.StatusOK() {
++			continue
++		}
++		if t.f.opt.Enc != encoder.EncodeZero {
++			sub = t.f.opt.Enc.ToStandardName(sub)
++		}
++		entries = append(entries, trashEntry{name: sub, isDir: itemIsDir(item), props: &item.Props})
++	}
++	return entries, nil
++}
++
++// list returns the top level trash items, cached for trashListTTL
++func (t *trash) list(ctx context.Context) ([]*trashItem, error) {
++	t.mu.Lock()
++	defer t.mu.Unlock()
++	if time.Since(t.fetched) < trashListTTL {
++		return t.items, nil
++	}
++	entries, err := t.propfind(ctx, "trash/")
++	if err != nil {
++		return nil, err
++	}
++	var items []*trashItem
++	for _, e := range entries {
++		// Items deleted through occ have a leading slash
++		orig := strings.TrimPrefix(e.props.TrashbinOriginalLocation, "/")
++		if t.prefix != "" {
++			rel, ok := strings.CutPrefix(orig, t.prefix+"/")
++			if !ok {
++				continue
++			}
++			orig = rel
++		}
++		filename := e.props.TrashbinFilename
++		if filename == "" {
++			filename = path.Base(orig)
++		}
++		items = append(items, &trashItem{
++			id:       e.name,
++			name:     filename,
++			orig:     orig,
++			deleted:  time.Unix(e.props.TrashbinDeletionTime, 0),
++			isDir:    e.isDir,
++			size:     e.props.Size,
++			modified: time.Time(e.props.Modified),
++		})
++	}
++	// Items trashed through this Fs keep the name the client chose, as
++	// file managers remember it. Of the rest, the oldest item with a
++	// given filename keeps that name and the others use their trash bin
++	// id, which is unique and stable.
++	sort.Slice(items, func(i, j int) bool {
++		if !items[i].deleted.Equal(items[j].deleted) {
++			return items[i].deleted.Before(items[j].deleted)
++		}
++		return items[i].id < items[j].id
++	})
++	t.byName = make(map[string]*trashItem, len(items))
++	t.byID = make(map[string]*trashItem, len(items))
++	var rest []*trashItem
++	for _, it := range items {
++		t.byID[it.id] = it
++		if name, ok := t.aliases[it.id]; ok && t.byName[name] == nil {
++			it.name = name
++			t.byName[name] = it
++		} else {
++			rest = append(rest, it)
++		}
++	}
++	for id := range t.aliases {
++		if t.byID[id] == nil {
++			delete(t.aliases, id)
++		}
++	}
++	for _, it := range rest {
++		if t.byName[it.name] != nil || strings.HasSuffix(it.name, trashInfoSuffix) {
++			it.name = it.id
++		}
++		t.byName[it.name] = it
++	}
++	t.items = items
++	t.fetched = time.Now()
++	return items, nil
++}
++
++// find returns the item for a name under files/
++func (t *trash) find(ctx context.Context, name string) (*trashItem, error) {
++	if _, err := t.list(ctx); err != nil {
++		return nil, err
++	}
++	t.mu.Lock()
++	defer t.mu.Unlock()
++	if it := t.byName[name]; it != nil {
++		return it, nil
++	}
++	if it := t.byID[name]; it != nil {
++		return it, nil
++	}
++	return nil, fs.ErrorObjectNotFound
++}
++
++// findOrig returns the newest item which came from orig
++func (t *trash) findOrig(ctx context.Context, orig string) (*trashItem, error) {
++	items, err := t.list(ctx)
++	if err != nil {
++		return nil, err
++	}
++	for i := len(items) - 1; i >= 0; i-- {
++		if items[i].orig == orig {
++			return items[i], nil
++		}
++	}
++	return nil, fs.ErrorObjectNotFound
++}
++
++// remember gives the newest item from orig the name a client chose
++func (t *trash) remember(ctx context.Context, orig, name string) *trashItem {
++	it, err := t.findOrig(ctx, orig)
++	if err != nil {
++		fs.Debugf(t.f, "Can't find %q in the trash bin: %v", orig, err)
++		return nil
++	}
++	t.mu.Lock()
++	if t.aliases == nil {
++		t.aliases = make(map[string]string)
++	}
++	t.aliases[it.id] = name
++	t.fetched = time.Time{}
++	t.mu.Unlock()
++	return it
++}
++
++// resolve splits files/<name>[/sub] into the item and sub path
++func (t *trash) resolve(ctx context.Context, rel string) (*trashItem, string, error) {
++	name, sub, _ := strings.Cut(rel, "/")
++	it, err := t.find(ctx, name)
++	return it, sub, err
++}
++
++// infoContent renders the .trashinfo file for an item
++func (t *trash) infoContent(it *trashItem) []byte {
++	return fmt.Appendf(nil, "[Trash Info]\nPath=%s\nDeletionDate=%s\n",
++		escapeTrashPath(it.orig), it.deleted.Local().Format(trashDateFormat))
++}
++
++// escapeTrashPath escapes like g_uri_escape_string(p, "/", FALSE)
++func escapeTrashPath(p string) string {
++	var b strings.Builder
++	for i := 0; i < len(p); i++ {
++		c := p[i]
++		if c == '/' || c == '-' || c == '.' || c == '_' || c == '~' ||
++			('0' <= c && c <= '9') || ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') {
++			b.WriteByte(c)
++		} else {
++			fmt.Fprintf(&b, "%%%02X", c)
++		}
++	}
++	return b.String()
++}
++
++// List lists a directory inside the trash
++func (t *trash) List(ctx context.Context, dir string) (fs.DirEntries, error) {
++	kind, rel := t.classify(dir)
++	now := time.Now()
++	switch kind {
++	case trashRoot:
++		return fs.DirEntries{
++			fs.NewDir(path.Join(t.dir, trashFilesDir), now),
++			fs.NewDir(path.Join(t.dir, trashInfoDir), now),
++		}, nil
++	case trashExp, trashExpP:
++		return nil, nil
++	case trashFiles, trashInfo:
++		items, err := t.list(ctx)
++		if err != nil {
++			return nil, err
++		}
++		entries := make(fs.DirEntries, 0, len(items))
++		for _, it := range items {
++			if kind == trashInfo {
++				entries = append(entries, t.newInfoObject(it))
++			} else if it.isDir {
++				entries = append(entries, fs.NewDir(t.filesRemote(it.name), it.deleted))
++			} else {
++				entries = append(entries, t.newItemObject(t.filesRemote(it.name), it, "", it.size, it.modified))
++			}
++		}
++		return entries, nil
++	case trashItemP:
++		it, sub, err := t.resolve(ctx, rel)
++		if errors.Is(err, fs.ErrorObjectNotFound) {
++			return nil, fs.ErrorDirNotFound
++		}
++		if err != nil {
++			return nil, err
++		}
++		if !it.isDir {
++			return nil, fs.ErrorIsFile
++		}
++		children, err := t.propfind(ctx, addSlash("trash/"+t.escape(path.Join(it.id, sub))))
++		if err != nil {
++			return nil, err
++		}
++		entries := make(fs.DirEntries, 0, len(children))
++		for _, c := range children {
++			remote := path.Join(t.filesRemote(it.name), sub, c.name)
++			if c.isDir {
++				entries = append(entries, fs.NewDir(remote, time.Time(c.props.Modified)))
++			} else {
++				entries = append(entries, t.newItemObject(remote, it, path.Join(sub, c.name), c.props.Size, time.Time(c.props.Modified)))
++			}
++		}
++		return entries, nil
++	}
++	return nil, fs.ErrorDirNotFound
++}
++
++// NewObject finds an object inside the trash
++func (t *trash) NewObject(ctx context.Context, remote string) (fs.Object, error) {
++	kind, rel := t.classify(remote)
++	switch kind {
++	case trashRoot, trashFiles, trashInfo, trashExp:
++		return nil, fs.ErrorIsDir
++	case trashInfoP:
++		name, ok := strings.CutSuffix(rel, trashInfoSuffix)
++		if !ok || strings.Contains(name, "/") {
++			return nil, fs.ErrorObjectNotFound
++		}
++		it, err := t.find(ctx, name)
++		if err != nil {
++			return nil, err
++		}
++		return t.newInfoObject(it), nil
++	case trashItemP:
++		it, sub, err := t.resolve(ctx, rel)
++		if err != nil {
++			return nil, err
++		}
++		if sub == "" {
++			if it.isDir {
++				return nil, fs.ErrorIsDir
++			}
++			return t.newItemObject(remote, it, "", it.size, it.modified), nil
++		}
++		parent := addSlash("trash/" + t.escape(path.Join(it.id, path.Dir(sub))))
++		children, err := t.propfind(ctx, parent)
++		if err != nil {
++			return nil, err
++		}
++		for _, c := range children {
++			if c.name == path.Base(sub) {
++				if c.isDir {
++					return nil, fs.ErrorIsDir
++				}
++				return t.newItemObject(remote, it, sub, c.props.Size, time.Time(c.props.Modified)), nil
++			}
++		}
++	}
++	return nil, fs.ErrorObjectNotFound
++}
++
++// Put accepts .trashinfo files and drops them, as the info comes
++// from the server. Anything else is refused.
++func (t *trash) Put(ctx context.Context, in io.Reader, src fs.ObjectInfo) (fs.Object, error) {
++	kind, rel := t.classify(src.Remote())
++	switch kind {
++	case trashInfoP, trashItemP, trashExpP:
++		if kind != trashInfoP {
++			// A file trashed before it was uploaded never reached the server
++			fs.Logf(src, "Dropping upload of %q into the trash", rel)
++		}
++		o := &trashInfoObject{t: t, remote: src.Remote()}
++		return o, o.Update(ctx, in, src)
++	}
++	return nil, fs.ErrorPermissionDenied
++}
++
++// Mkdir accepts the fixed directories of the trash
++func (t *trash) Mkdir(dir string) error {
++	switch kind, _ := t.classify(dir); kind {
++	case trashRoot, trashFiles, trashInfo, trashExp, trashExpP:
++		return nil
++	}
++	return fs.ErrorPermissionDenied
++}
++
++// Rmdir deletes a directory from the trash bin for good
++func (t *trash) Rmdir(ctx context.Context, dir string) error {
++	kind, rel := t.classify(dir)
++	if kind == trashExp || kind == trashExpP {
++		return nil
++	}
++	if kind != trashItemP {
++		return fs.ErrorPermissionDenied
++	}
++	it, sub, err := t.resolve(ctx, rel)
++	if errors.Is(err, fs.ErrorObjectNotFound) {
++		return fs.ErrorDirNotFound
++	}
++	if err != nil {
++		return err
++	}
++	return t.delete(ctx, it, sub)
++}
++
++// delete removes an item or a path inside it from the trash bin
++func (t *trash) delete(ctx context.Context, it *trashItem, sub string) error {
++	defer t.invalidate()
++	p := "trash/" + t.escape(path.Join(it.id, sub))
++	_, err := t.call(ctx, &rest.Opts{Method: "DELETE", Path: p, NoResponse: true})
++	if apiErr, ok := err.(*api.Error); ok && apiErr.StatusCode == http.StatusNotFound {
++		return nil
++	}
++	return err
++}
++
++// expunge deletes files/<rel> from the trash bin for good
++func (t *trash) expunge(ctx context.Context, rel string) error {
++	it, sub, err := t.resolve(ctx, rel)
++	if err != nil {
++		return err
++	}
++	return t.delete(ctx, it, sub)
++}
++
++// toTrash deletes remote from the files endpoint, which moves it to
++// the trash bin
++func (t *trash) toTrash(ctx context.Context, remote string, isDir bool) error {
++	defer t.invalidate()
++	p := t.f.filePath(remote)
++	if isDir {
++		p = addSlash(p)
++	}
++	return t.f.pacer.Call(func() (bool, error) {
++		resp, err := t.f.srv.Call(ctx, &rest.Opts{Method: "DELETE", Path: p, NoResponse: true})
++		return t.f.shouldRetry(ctx, resp, err)
++	})
++}
++
++// restore moves files/<rel> to dst
++//
++// The server restores to the original location. If that is taken
++// fs.ErrorCantMove is returned so the caller falls back to a copy.
++func (t *trash) restore(ctx context.Context, rel, dst string) error {
++	it, sub, err := t.resolve(ctx, rel)
++	if err != nil {
++		return err
++	}
++	orig := path.Join(it.orig, sub)
++	switch _, err := t.f.readMetaDataForPath(ctx, orig); {
++	case err == nil, errors.Is(err, fs.ErrorIsDir):
++		fs.Debugf(t.f, "Can't restore %q: %q exists", rel, orig)
++		return fs.ErrorCantMove
++	case !errors.Is(err, fs.ErrorObjectNotFound):
++		return err
++	}
++	src := t.escape(path.Join(it.id, sub))
++	dest, err := url.Parse(t.rootURL + "restore/" + src)
++	if err != nil {
++		return err
++	}
++	t.invalidate()
++	_, err = t.call(ctx, &rest.Opts{
++		Method:       "MOVE",
++		Path:         "trash/" + src,
++		NoResponse:   true,
++		ExtraHeaders: map[string]string{"Destination": dest.String()},
++	})
++	if err != nil {
++		return fmt.Errorf("trash bin restore failed: %w", err)
++	}
++	if orig == dst {
++		return nil
++	}
++	return t.f.moveRaw(ctx, orig, dst)
++}
++
++// Move handles moves into and out of the trash
++func (t *trash) Move(ctx context.Context, src fs.Object, remote string) (fs.Object, error) {
++	srcKind, srcRel := t.classify(src.Remote())
++	dstKind, dstRel := t.classify(remote)
++	switch {
++	case srcKind == trashNone && dstKind == trashItemP && !strings.Contains(dstRel, "/"):
++		if err := t.toTrash(ctx, src.Remote(), false); err != nil {
++			return nil, err
++		}
++		it := t.remember(ctx, src.Remote(), dstRel)
++		return &trashItemObject{t: t, remote: remote, item: it, orig: src.Remote(), size: src.Size(), modTime: src.ModTime(ctx)}, nil
++	case srcKind == trashItemP && dstKind == trashNone:
++		if err := t.restore(ctx, srcRel, remote); err != nil {
++			return nil, err
++		}
++		return t.f.NewObject(ctx, remote)
++	case srcKind == trashItemP && dstKind == trashExpP:
++		if err := t.expunge(ctx, srcRel); err != nil {
++			return nil, err
++		}
++		return &trashInfoObject{t: t, remote: remote, size: src.Size(), modTime: src.ModTime(ctx)}, nil
++	}
++	return nil, fs.ErrorCantMove
++}
++
++// DirMove handles directory moves into and out of the trash
++func (t *trash) DirMove(ctx context.Context, srcRemote, dstRemote string) error {
++	srcKind, srcRel := t.classify(srcRemote)
++	dstKind, dstRel := t.classify(dstRemote)
++	switch {
++	case srcKind == trashNone && dstKind == trashItemP && !strings.Contains(dstRel, "/"):
++		if err := t.toTrash(ctx, srcRemote, true); err != nil {
++			return err
++		}
++		t.remember(ctx, srcRemote, dstRel)
++		return nil
++	case srcKind == trashItemP && dstKind == trashNone:
++		err := t.restore(ctx, srcRel, dstRemote)
++		if errors.Is(err, fs.ErrorCantMove) {
++			return fs.ErrorCantDirMove
++		}
++		return err
++	case srcKind == trashItemP && dstKind == trashExpP:
++		return t.expunge(ctx, srcRel)
++	}
++	return fs.ErrorCantDirMove
++}
++
++// moveRaw does a server-side MOVE of a file or directory
++func (f *Fs) moveRaw(ctx context.Context, src, dst string) error {
++	dstPath := f.filePath(dst)
++	if err := f.mkParentDir(ctx, dstPath); err != nil {
++		return err
++	}
++	dest, err := rest.URLJoin(f.endpoint, dstPath)
++	if err != nil {
++		return err
++	}
++	return f.pacer.Call(func() (bool, error) {
++		resp, err := f.srv.Call(ctx, &rest.Opts{
++			Method:       "MOVE",
++			Path:         f.filePath(src),
++			NoResponse:   true,
++			ExtraHeaders: map[string]string{"Destination": dest.String(), "Overwrite": "F"},
++		})
++		return f.shouldRetry(ctx, resp, err)
++	})
++}
++
++// trashItemObject is a file in the trash bin, or one inside a
++// trashed directory
++type trashItemObject struct {
++	t       *trash
++	remote  string
++	item    *trashItem // nil until resolved
++	orig    string     // used to resolve a freshly trashed file
++	sub     string     // path inside the item
++	size    int64
++	modTime time.Time
++}
++
++func (t *trash) newItemObject(remote string, it *trashItem, sub string, size int64, modTime time.Time) *trashItemObject {
++	return &trashItemObject{t: t, remote: remote, item: it, sub: sub, size: size, modTime: modTime}
++}
++
++// resolveItem finds the trash bin item behind o
++func (o *trashItemObject) resolveItem(ctx context.Context) (*trashItem, error) {
++	if o.item != nil {
++		return o.item, nil
++	}
++	it, err := o.t.findOrig(ctx, o.orig)
++	if err != nil {
++		return nil, err
++	}
++	o.item = it
++	return it, nil
++}
++
++func (o *trashItemObject) Fs() fs.Info                       { return o.t.f }
++func (o *trashItemObject) String() string                    { return o.remote }
++func (o *trashItemObject) Remote() string                    { return o.remote }
++func (o *trashItemObject) Size() int64                       { return o.size }
++func (o *trashItemObject) ModTime(context.Context) time.Time { return o.modTime }
++func (o *trashItemObject) Storable() bool                    { return true }
++
++func (o *trashItemObject) Hash(context.Context, hash.Type) (string, error) {
++	return "", nil
++}
++
++func (o *trashItemObject) SetModTime(context.Context, time.Time) error {
++	return fs.ErrorCantSetModTime
++}
++
++func (o *trashItemObject) Open(ctx context.Context, options ...fs.OpenOption) (io.ReadCloser, error) {
++	it, err := o.resolveItem(ctx)
++	if err != nil {
++		return nil, err
++	}
++	fs.FixRangeOption(options, o.size)
++	resp, err := o.t.call(ctx, &rest.Opts{
++		Method:  "GET",
++		Path:    "trash/" + o.t.escape(path.Join(it.id, o.sub)),
++		Options: options,
++	})
++	if err != nil {
++		return nil, err
++	}
++	return resp.Body, nil
++}
++
++func (o *trashItemObject) Update(context.Context, io.Reader, fs.ObjectInfo, ...fs.OpenOption) error {
++	return fs.ErrorPermissionDenied
++}
++
++func (o *trashItemObject) Remove(ctx context.Context) error {
++	it, err := o.resolveItem(ctx)
++	if err != nil {
++		return err
++	}
++	return o.t.delete(ctx, it, o.sub)
++}
++
++// trashInfoObject is a .trashinfo file, or an upload that was dropped
++type trashInfoObject struct {
++	t       *trash
++	remote  string
++	data    []byte
++	size    int64
++	sums    map[hash.Type]string // hashes of the upload
++	modTime time.Time
++}
++
++func (t *trash) newInfoObject(it *trashItem) *trashInfoObject {
++	data := t.infoContent(it)
++	return &trashInfoObject{t: t, remote: t.infoRemote(it.name), data: data, size: int64(len(data)), modTime: it.deleted}
++}
++
++func (o *trashInfoObject) Fs() fs.Info                       { return o.t.f }
++func (o *trashInfoObject) String() string                    { return o.remote }
++func (o *trashInfoObject) Remote() string                    { return o.remote }
++func (o *trashInfoObject) ModTime(context.Context) time.Time { return o.modTime }
++func (o *trashInfoObject) Storable() bool                    { return true }
++
++func (o *trashInfoObject) Size() int64 { return o.size }
++
++func (o *trashInfoObject) Hash(_ context.Context, ty hash.Type) (string, error) {
++	if o.sums != nil {
++		return o.sums[ty], nil
++	}
++	sums, err := hash.StreamTypes(bytes.NewReader(o.data), hash.NewHashSet(ty))
++	if err != nil {
++		return "", nil
++	}
++	return sums[ty], nil
++}
++
++func (o *trashInfoObject) SetModTime(context.Context, time.Time) error { return nil }
++
++func (o *trashInfoObject) Open(_ context.Context, options ...fs.OpenOption) (io.ReadCloser, error) {
++	data := o.data
++	fs.FixRangeOption(options, int64(len(data)))
++	for _, option := range options {
++		if r, ok := option.(*fs.RangeOption); ok {
++			offset, limit := r.Decode(int64(len(data)))
++			data = data[min(offset, int64(len(data))):]
++			if limit >= 0 && limit < int64(len(data)) {
++				data = data[:limit]
++			}
++		}
++	}
++	return io.NopCloser(bytes.NewReader(data)), nil
++}
++
++// Update reads in, keeping its hashes so transfer checks pass
++func (o *trashInfoObject) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, _ ...fs.OpenOption) error {
++	hasher, err := hash.NewMultiHasherTypes(o.t.f.Hashes())
++	if err != nil {
++		return err
++	}
++	var buf bytes.Buffer
++	w := io.MultiWriter(hasher, &limitedWriter{w: &buf, n: trashInfoMaxSize})
++	if _, err := io.Copy(w, in); err != nil {
++		return err
++	}
++	o.data = buf.Bytes()
++	o.size = hasher.Size()
++	o.sums = hasher.Sums()
++	o.modTime = src.ModTime(ctx)
++	return nil
++}
++
++// limitedWriter keeps the first n bytes and drops the rest
++type limitedWriter struct {
++	w io.Writer
++	n int64
++}
++
++func (l *limitedWriter) Write(p []byte) (int, error) {
++	if l.n > 0 {
++		k := min(int64(len(p)), l.n)
++		if _, err := l.w.Write(p[:k]); err != nil {
++			return 0, err
++		}
++		l.n -= k
++	}
++	return len(p), nil
++}
++
++func (o *trashInfoObject) Remove(context.Context) error { return nil }
++
++var (
++	_ fs.Object = (*trashItemObject)(nil)
++	_ fs.Object = (*trashInfoObject)(nil)
++)
+diff --git a/backend/webdav/webdav.go b/backend/webdav/webdav.go
+index e5c2d9e..04376b2 100644
+--- a/backend/webdav/webdav.go
++++ b/backend/webdav/webdav.go
+@@ -161,6 +161,21 @@ Set to 0 to disable chunked uploading.
+ `,
+ 			Advanced: true,
+ 			Default:  10 * fs.Mebi, // Default NextCloud `max_chunk_size` is `10 MiB`. See https://github.com/nextcloud/server/blob/0447b53bda9fe95ea0cbed765aa332584605d652/apps/files/lib/App.php#L57
++		}, {
++			Name: "nextcloud_trash_dir",
++			Help: `Serve the Nextcloud trash bin as a trash directory.
++
++Set this to the name of the per-user trash directory of the
++freedesktop.org trash specification, e.g. ".Trash-1000". The root of
++the remote then contains a virtual directory of that name whose
++contents come from the Nextcloud trash bin. File managers which trash
++files by moving them there use the server-side trash bin instead.
++
++Needs the nextcloud vendor and a URL of the form
++https://example.com/remote.php/dav/files/USER/.
++`,
++			Advanced: true,
++			Default:  "",
+ 		}, {
+ 			Name:     "owncloud_exclude_shares",
+ 			Help:     "Exclude ownCloud shares",
+@@ -210,6 +225,7 @@ type Options struct {
+ 	Headers            fs.CommaSepList      `config:"headers"`
+ 	PacerMinSleep      fs.Duration          `config:"pacer_min_sleep"`
+ 	ChunkSize          fs.SizeSuffix        `config:"nextcloud_chunk_size"`
++	TrashDir           string               `config:"nextcloud_trash_dir"`
+ 	ExcludeShares      bool                 `config:"owncloud_exclude_shares"`
+ 	ExcludeMounts      bool                 `config:"owncloud_exclude_mounts"`
+ 	UnixSocket         string               `config:"unix_socket"`
+@@ -242,6 +258,7 @@ type Fs struct {
+ 	canChunk           bool          // set if nextcloud and nextcloud_chunk_size is set
+ 	canRecalcHash      bool          // set if the server can recalculate checksums with PATCH (nextcloud)
+ 	authSingleflight   *singleflight.Group
++	trash              *trash // set if nextcloud_trash_dir is set
+ 	// redirect policy which keeps opt.Headers on the configured host
+ 	checkRedirect func(req *http.Request, via []*http.Request) error
+ }
+@@ -598,6 +615,12 @@ func NewFs(ctx context.Context, name, root string, m configmap.Mapper) (fs.Fs, e
+ 	if err != nil {
+ 		return nil, err
+ 	}
++	if opt.TrashDir != "" {
++		f.trash, err = newTrash(f, opt.TrashDir)
++		if err != nil {
++			return nil, err
++		}
++	}
+ 	if !f.findHeader(opt.Headers, "Referer") {
+ 		f.srv.SetHeader("Referer", u.String())
+ 	}
+@@ -823,6 +846,9 @@ func (f *Fs) newObjectWithInfo(ctx context.Context, remote string, info *api.Pro
+ // NewObject finds the Object at remote.  If it can't be found
+ // it returns the error fs.ErrorObjectNotFound.
+ func (f *Fs) NewObject(ctx context.Context, remote string) (fs.Object, error) {
++	if f.trash.in(remote) {
++		return f.trash.NewObject(ctx, remote)
++	}
+ 	return f.newObjectWithInfo(ctx, remote, nil)
+ }
+ 
+@@ -1000,9 +1026,19 @@ func (f *Fs) List(ctx context.Context, dir string) (entries fs.DirEntries, err e
+ // callback returns an error then the listing will stop
+ // immediately.
+ func (f *Fs) ListP(ctx context.Context, dir string, callback fs.ListRCallback) error {
++	if f.trash.in(dir) {
++		entries, err := f.trash.List(ctx, dir)
++		if err != nil {
++			return err
++		}
++		return callback(entries)
++	}
+ 	list := list.NewHelper(callback)
+ 	var iErr error
+ 	_, err := f.listAll(ctx, dir, false, false, defaultDepth, func(remote string, isDir bool, info *api.Prop) bool {
++		if f.trash != nil && remote == f.trash.dir {
++			return false
++		}
+ 		if isDir {
+ 			d := fs.NewDir(remote, time.Time(info.Modified))
+ 			// .SetID(info.ID)
+@@ -1032,6 +1068,11 @@ func (f *Fs) ListP(ctx context.Context, dir string, callback fs.ListRCallback) e
+ 	if iErr != nil {
+ 		return iErr
+ 	}
++	if f.trash != nil && dir == "" {
++		if err := list.Add(fs.NewDir(f.trash.dir, time.Now())); err != nil {
++			return err
++		}
++	}
+ 	return list.Flush()
+ }
+ 
+@@ -1056,6 +1097,9 @@ func (f *Fs) createObject(remote string, modTime time.Time, size int64) (o *Obje
+ //
+ // The new object may have been created if an error is returned
+ func (f *Fs) Put(ctx context.Context, in io.Reader, src fs.ObjectInfo, options ...fs.OpenOption) (fs.Object, error) {
++	if f.trash.in(src.Remote()) {
++		return f.trash.Put(ctx, in, src)
++	}
+ 	o := f.createObject(src.Remote(), src.ModTime(ctx), src.Size())
+ 	return o, o.Update(ctx, in, src, options...)
+ }
+@@ -1155,6 +1199,9 @@ func (f *Fs) mkdir(ctx context.Context, dirPath string) (err error) {
+ 
+ // Mkdir creates the directory if it doesn't exist
+ func (f *Fs) Mkdir(ctx context.Context, dir string) error {
++	if f.trash.in(dir) {
++		return f.trash.Mkdir(dir)
++	}
+ 	dirPath := f.dirPath(dir)
+ 	return f.mkdir(ctx, dirPath)
+ }
+@@ -1213,6 +1260,9 @@ func (f *Fs) purgeCheck(ctx context.Context, dir string, check bool) error {
+ //
+ // Returns an error if it isn't empty
+ func (f *Fs) Rmdir(ctx context.Context, dir string) error {
++	if f.trash.in(dir) {
++		return f.trash.Rmdir(ctx, dir)
++	}
+ 	return f.purgeCheck(ctx, dir, true)
+ }
+ 
+@@ -1294,6 +1344,9 @@ func (f *Fs) copyOrMove(ctx context.Context, src fs.Object, remote string, metho
+ //
+ // If it isn't possible then return fs.ErrorCantCopy
+ func (f *Fs) Copy(ctx context.Context, src fs.Object, remote string) (fs.Object, error) {
++	if f.trash.in(src.Remote()) || f.trash.in(remote) {
++		return nil, fs.ErrorCantCopy
++	}
+ 	return f.copyOrMove(ctx, src, remote, "COPY")
+ }
+ 
+@@ -1303,6 +1356,9 @@ func (f *Fs) Copy(ctx context.Context, src fs.Object, remote string) (fs.Object,
+ // deleting all the files quicker than just running Remove() on the
+ // result of List()
+ func (f *Fs) Purge(ctx context.Context, dir string) error {
++	if f.trash.in(dir) {
++		return f.trash.Rmdir(ctx, dir)
++	}
+ 	return f.purgeCheck(ctx, dir, false)
+ }
+ 
+@@ -1316,6 +1372,12 @@ func (f *Fs) Purge(ctx context.Context, dir string) error {
+ //
+ // If it isn't possible then return fs.ErrorCantMove
+ func (f *Fs) Move(ctx context.Context, src fs.Object, remote string) (fs.Object, error) {
++	if f.trash.in(src.Remote()) || f.trash.in(remote) {
++		if src.Fs() != f {
++			return nil, fs.ErrorCantMove
++		}
++		return f.trash.Move(ctx, src, remote)
++	}
+ 	return f.copyOrMove(ctx, src, remote, "MOVE")
+ }
+ 
+@@ -1333,6 +1395,12 @@ func (f *Fs) DirMove(ctx context.Context, src fs.Fs, srcRemote, dstRemote string
+ 		fs.Debugf(srcFs, "Can't move directory - not same remote type")
+ 		return fs.ErrorCantDirMove
+ 	}
++	if f.trash.in(dstRemote) || srcFs.trash.in(srcRemote) {
++		if srcFs != f {
++			return fs.ErrorCantDirMove
++		}
++		return f.trash.DirMove(ctx, srcRemote, dstRemote)
++	}
+ 	srcPath := srcFs.filePath(srcRemote)
+ 	dstPath := f.filePath(dstRemote)
+ 
