@@ -9,15 +9,17 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use log::debug;
+
 use crate::error::{Error, Result};
-use crate::log::debug;
 use crate::sxuptp::{Notification, ReplyHeader, Request, Transfer, status};
 use crate::usbip::{Command, Reply, Submit, errno};
 
-/// How long the server gets to answer a cancel before the unlink is
-/// completed locally. `usb_kill_urb` waits forever otherwise.
-const CANCEL_TIMEOUT: Duration = Duration::from_secs(1);
-const REAP_INTERVAL: Duration = Duration::from_millis(100);
+/// How long the sequence number of a cancelled request stays blocked. The
+/// server never answers a cancel, but a reply sent before it saw the cancel
+/// may still be on its way.
+const ORPHAN_TTL: Duration = Duration::from_secs(10);
+const REAP_INTERVAL: Duration = Duration::from_secs(1);
 const RETRY_DELAY: Duration = Duration::from_millis(1);
 
 /// A request sent to the server and not yet answered.
@@ -26,15 +28,14 @@ struct Pending {
     dir_in: bool,
     partial: Vec<u8>,
     request: Request,
-    unlink: Option<Unlink>,
     usbip_seq: u32,
 }
 
 /// What a server sequence number currently stands for.
 enum Slot {
     Live(Pending),
-    /// The unlink was completed locally. A late reply is dropped.
-    Orphan,
+    /// The request was cancelled at the given time. A late reply is dropped.
+    Orphan(Instant),
 }
 
 /// The in-flight table, shared by all threads.
@@ -43,11 +44,6 @@ struct State {
     by_usbip: HashMap<u32, u16>,
     next_seq: u16,
     slots: HashMap<u16, Slot>,
-}
-
-struct Unlink {
-    seqnum: u32,
-    since: Instant,
 }
 
 /// One bridged device.
@@ -85,6 +81,11 @@ impl<'a> Bridge<'a> {
             reaper.join().expect("reaper thread panicked");
             up.and(down)
         })
+    }
+
+    /// Makes `run` return. In-flight URBs are not completed.
+    pub(crate) fn stop(&self) {
+        let _ = self.finish(Ok(()));
     }
 
     fn deliver(&self, reply: &Reply<'_>) -> Result<()> {
@@ -131,18 +132,12 @@ impl<'a> Bridge<'a> {
     fn on_reply(&self, h: &ReplyHeader, data: Vec<u8>) -> Result<()> {
         let mut state = self.lock_state();
         let Some(slot) = state.slots.get_mut(&h.seq) else {
-            debug(format_args!(
-                "reply for unknown seq {} op {:#06x}, skipped",
-                h.seq, h.op
-            ));
+            debug!("reply for unknown seq {} op {:#06x}, skipped", h.seq, h.op);
             return Ok(());
         };
         let Slot::Live(p) = slot else {
             state.slots.remove(&h.seq);
-            debug(format_args!(
-                "late reply for unlinked seq {}, dropped",
-                h.seq
-            ));
+            debug!("late reply for unlinked seq {}, dropped", h.seq);
             return Ok(());
         };
         match h.status {
@@ -177,31 +172,17 @@ impl<'a> Bridge<'a> {
         } else {
             (if status == 0 { p.buffer_length } else { 0 }, &[][..])
         };
-        debug(format_args!(
+        debug!(
             "ret seq {} usbip {} status {:#06x} -> {status} actual {actual}",
             h.seq, p.usbip_seq, h.status
-        ));
+        );
 
-        let submit = Reply::Submit {
+        self.deliver(&Reply::Submit {
             actual,
             data,
             seqnum: p.usbip_seq,
             status,
-        };
-        match p.unlink {
-            None => self.deliver(&submit),
-            Some(u) if status == 0 => {
-                self.deliver(&submit)?;
-                self.deliver(&Reply::Unlink {
-                    seqnum: u.seqnum,
-                    status: 0,
-                })
-            }
-            Some(u) => self.deliver(&Reply::Unlink {
-                seqnum: u.seqnum,
-                status: errno::ECONNRESET,
-            }),
-        }
+        })
     }
 
     fn on_submit(&self, s: Submit) -> Result<()> {
@@ -224,7 +205,7 @@ impl<'a> Bridge<'a> {
                 Some(e) if e.transfer != Transfer::Isochronous => Some((address, *e)),
                 Some(_) => return reject(errno::EXDEV),
                 None => {
-                    debug(format_args!("submit to unknown endpoint {address:#04x}"));
+                    debug!("submit to unknown endpoint {address:#04x}");
                     return reject(errno::EPIPE);
                 }
             }
@@ -238,10 +219,10 @@ impl<'a> Bridge<'a> {
                 .device
                 .transfer(seq, address, e, s.buffer_length, &s.data),
         };
-        debug(format_args!(
+        debug!(
             "submit usbip {} -> seq {seq} ep {:#04x} in {} len {} setup {:02x?}",
             s.seqnum, s.ep, s.dir_in, s.buffer_length, s.setup
-        ));
+        );
         let bytes = request.encode();
         state.by_usbip.insert(s.seqnum, seq);
         state.slots.insert(
@@ -251,7 +232,6 @@ impl<'a> Bridge<'a> {
                 dir_in: s.dir_in,
                 partial: Vec::new(),
                 request,
-                unlink: None,
                 usbip_seq: s.seqnum,
             }),
         );
@@ -259,61 +239,40 @@ impl<'a> Bridge<'a> {
         self.send(&bytes)
     }
 
+    /// Cancels the request on the server and completes the unlink without
+    /// waiting, like the vendor driver. The server never answers a cancel.
     fn on_unlink(&self, seqnum: u32, target: u32) -> Result<()> {
         let mut state = self.lock_state();
-        let seq = state.by_usbip.get(&target).copied();
-        let cancel = seq.and_then(|seq| match state.slots.get_mut(&seq) {
-            Some(Slot::Live(p)) if p.unlink.is_none() => {
-                p.unlink = Some(Unlink {
-                    seqnum,
-                    since: Instant::now(),
-                });
-                Some(p.request.cancel())
-            }
-            _ => None,
+        let seq = state.by_usbip.remove(&target);
+        let cancel = seq.and_then(|seq| {
+            let slot = state.slots.get_mut(&seq)?;
+            let Slot::Live(p) = slot else {
+                return None;
+            };
+            let frame = p.request.cancel();
+            *slot = Slot::Orphan(Instant::now());
+            Some(frame)
         });
         drop(state);
-        debug(format_args!(
-            "unlink usbip {target} (seq {seq:?}) by {seqnum}"
-        ));
-        match cancel {
-            Some(frame) => self.send(&frame),
-            None => self.deliver(&Reply::Unlink { seqnum, status: 0 }),
-        }
+        debug!("unlink usbip {target} (seq {seq:?}) by {seqnum}");
+        // Without a cancel the URB has already been given back.
+        let status = match cancel {
+            Some(frame) => {
+                self.send(&frame)?;
+                errno::ECONNRESET
+            }
+            None => 0,
+        };
+        self.deliver(&Reply::Unlink { seqnum, status })
     }
 
-    /// Completes unlinks the server did not answer in time.
+    /// Frees the sequence numbers of requests cancelled long ago.
     fn reaper(&self) {
         while !self.stop.load(Ordering::Relaxed) {
             thread::sleep(REAP_INTERVAL);
-            let mut expired = Vec::new();
-            let mut state = self.lock_state();
-            let State {
-                by_usbip, slots, ..
-            } = &mut *state;
-            for slot in slots.values_mut() {
-                if let Slot::Live(p) = slot
-                    && let Some(u) = &p.unlink
-                    && u.since.elapsed() > CANCEL_TIMEOUT
-                {
-                    by_usbip.remove(&p.usbip_seq);
-                    expired.push(u.seqnum);
-                    *slot = Slot::Orphan;
-                }
-            }
-            drop(state);
-            for seqnum in expired {
-                debug(format_args!(
-                    "cancel timed out, unlink {seqnum} completed locally"
-                ));
-                let reply = Reply::Unlink {
-                    seqnum,
-                    status: errno::ECONNRESET,
-                };
-                if self.deliver(&reply).is_err() {
-                    return;
-                }
-            }
+            self.lock_state().slots.retain(
+                |_, slot| !matches!(slot, Slot::Orphan(since) if since.elapsed() > ORPHAN_TTL),
+            );
         }
     }
 

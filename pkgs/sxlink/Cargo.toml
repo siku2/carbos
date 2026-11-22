@@ -3,6 +3,18 @@ name = "sxlink"
 version = "0.1.0"
 edition = "2024"
 
+[dependencies]
+log = "0.4"
+
+[dependencies.env_logger]
+version = "0.11"
+default-features = false
+
+[dependencies.signal-hook]
+version = "0.4"
+default-features = false
+features = ["iterator"]
+
 [dependencies.zerocopy]
 version = "0.8.64"
 default-features = false

@@ -5,7 +5,7 @@
 //! USB device. `attach` runs in the foreground until the device goes away.
 //!
 //! ```text
-//! sxlink list 10.0.15.194
+//! sxlink list ds600.example.org
 //! sxlink attach 10.0.15.194 A104ADD8 --take
 //! sxlink release 10.0.15.194 usb4-003:0
 //! ```
@@ -13,7 +13,6 @@
 mod bridge;
 mod error;
 mod jcp;
-mod log;
 mod sxuptp;
 mod usbip;
 mod vhci;
@@ -23,6 +22,11 @@ use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
 use std::process::ExitCode;
+use std::thread;
+
+use log::{LevelFilter, error, info};
+use signal_hook::consts::{SIGINT, SIGTERM};
+use signal_hook::iterator::Signals;
 
 use crate::bridge::Bridge;
 use crate::error::{Error, Result};
@@ -35,40 +39,35 @@ const USAGE: &str = "usage: sxlink [-v] list <server>
 enum Action {
     Attach {
         selector: String,
-        server: IpAddr,
+        server: String,
         take: bool,
     },
     List {
-        server: IpAddr,
+        server: String,
     },
     Release {
         selector: String,
-        server: IpAddr,
+        server: String,
     },
 }
 
 impl Action {
     fn parse(mut args: Vec<String>) -> Result<Self> {
-        if let Some(i) = args.iter().position(|a| a == "-v") {
-            args.remove(i);
-            log::enable();
-        }
         let take = args
             .iter()
             .position(|a| a == "--take")
             .map(|i| args.remove(i))
             .is_some();
-        let server = |s: &String| s.parse().map_err(|_| Error::Usage);
         match args.as_slice() {
-            [cmd, s] if cmd == "list" && !take => Ok(Self::List { server: server(s)? }),
+            [cmd, s] if cmd == "list" && !take => Ok(Self::List { server: s.clone() }),
             [cmd, s, sel] if cmd == "attach" => Ok(Self::Attach {
                 selector: sel.clone(),
-                server: server(s)?,
+                server: s.clone(),
                 take,
             }),
             [cmd, s, sel] if cmd == "release" && !take => Ok(Self::Release {
                 selector: sel.clone(),
-                server: server(s)?,
+                server: s.clone(),
             }),
             _ => Err(Error::Usage),
         }
@@ -80,15 +79,15 @@ impl Action {
                 selector,
                 server,
                 take,
-            } => attach(server, &selector, take),
-            Self::List { server } => list(server),
-            Self::Release { selector, server } => release(server, &selector),
+            } => attach(&server, &selector, take),
+            Self::List { server } => list(&server),
+            Self::Release { selector, server } => release(&server, &selector),
         }
     }
 }
 
-fn attach(server: IpAddr, selector: &str, take: bool) -> Result<()> {
-    let client = Client::new(server)?;
+fn attach(server: &str, selector: &str, take: bool) -> Result<()> {
+    let client = Client::open(server)?;
     let device = client.find(selector)?;
     if !device.present {
         return Err(Error::DeviceAbsent { port: device.port });
@@ -96,7 +95,7 @@ fn attach(server: IpAddr, selector: &str, take: bool) -> Result<()> {
     match device.owner {
         Some(owner) if owner == client.local() => client.disconnect(&device.port, owner)?,
         Some(owner) if take => {
-            eprintln!("releasing {} from {owner}", device.port);
+            info!("releasing {} from {owner}", device.port);
             client.disconnect(&device.port, owner)?;
         }
         Some(owner) => {
@@ -123,7 +122,7 @@ fn attach(server: IpAddr, selector: &str, take: bool) -> Result<()> {
     let (ours, kernel) = UnixStream::pair().map_err(Error::VhciSocket)?;
     let devid = u32::from(n.bus) << 16 | u32::from(n.addr);
     let port = vhci::Port::attach(&OwnedFd::from(kernel), devid, n.speed)?;
-    eprintln!(
+    info!(
         "attached {} {:04x}:{:04x} ({}) to vhci port {}",
         device.port,
         device.vid,
@@ -132,14 +131,28 @@ fn attach(server: IpAddr, selector: &str, take: bool) -> Result<()> {
         port.number()
     );
 
-    let result = Bridge::new(&n, tcp, ours).run();
+    let mut signals = Signals::new([SIGINT, SIGTERM]).map_err(Error::Signals)?;
+    let signals_handle = signals.handle();
+    let bridge = Bridge::new(&n, tcp, ours);
+    let result = thread::scope(|s| {
+        s.spawn(|| {
+            if let Some(signal) = signals.forever().next() {
+                info!("stopping on signal {signal}");
+                bridge.stop();
+            }
+        });
+        let result = bridge.run();
+        signals_handle.close();
+        result
+    });
     // The kernel usually detaches by itself when the socket closes.
     let _ = port.detach();
+    info!("detached {}", device.port);
     result
 }
 
-fn list(server: IpAddr) -> Result<()> {
-    let client = Client::new(server)?;
+fn list(server: &str) -> Result<()> {
+    let client = Client::open(server)?;
     println!(
         "{:<12} {:<9} {:<10} {:<16} {:<16} NAME",
         "PORT", "ID", "LOCATION", "SERIAL", "OWNER"
@@ -159,7 +172,22 @@ fn list(server: IpAddr) -> Result<()> {
 }
 
 fn main() -> ExitCode {
-    let result = Action::parse(std::env::args().skip(1).collect()).and_then(Action::run);
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    let verbose = args
+        .iter()
+        .position(|a| a == "-v")
+        .map(|i| args.remove(i))
+        .is_some();
+    env_logger::Builder::new()
+        .filter_level(if verbose {
+            LevelFilter::Debug
+        } else {
+            LevelFilter::Info
+        })
+        .format_target(false)
+        .init();
+
+    let result = Action::parse(args).and_then(Action::run);
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(Error::Usage) => {
@@ -167,27 +195,27 @@ fn main() -> ExitCode {
             ExitCode::from(2)
         }
         Err(err) => {
-            let mut msg = format!("sxlink: {err}");
+            let mut msg = err.to_string();
             let mut source = err.source();
             while let Some(s) = source {
                 msg.push_str(&format!(": {s}"));
                 source = s.source();
             }
-            eprintln!("{msg}");
+            error!("{msg}");
             ExitCode::FAILURE
         }
     }
 }
 
-fn release(server: IpAddr, selector: &str) -> Result<()> {
-    let client = Client::new(server)?;
+fn release(server: &str, selector: &str) -> Result<()> {
+    let client = Client::open(server)?;
     let device = client.find(selector)?;
     match device.owner {
         Some(owner) => {
             client.disconnect(&device.port, owner)?;
-            eprintln!("released {} from {owner}", device.port);
+            info!("released {} from {owner}", device.port);
         }
-        None => eprintln!("{} is not reserved", device.port),
+        None => info!("{} is not reserved", device.port),
     }
     Ok(())
 }

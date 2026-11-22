@@ -4,11 +4,13 @@
 //! with their binary arguments appended directly after the text.
 
 use std::io;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs, UdpSocket};
 use std::time::{Duration, Instant};
 
 use zerocopy::byteorder::{BE, U16};
 use zerocopy::{FromBytes, FromZeros, Immutable, IntoBytes, KnownLayout, Unaligned};
+
+use log::debug;
 
 use crate::error::{Error, Result};
 use crate::sxuptp::Notification;
@@ -100,23 +102,27 @@ pub(crate) struct Client {
 }
 
 impl Client {
-    pub(crate) fn new(server: IpAddr) -> Result<Self> {
-        if server.is_ipv6() {
-            return Err(Error::JcpIpv6NotImplemented);
+    /// Connects to the first address of `host` that answers a search.
+    ///
+    /// `host` is a host name or an IP literal.
+    pub(crate) fn open(host: &str) -> Result<Self> {
+        let addrs = (host, PORT)
+            .to_socket_addrs()
+            .map_err(|err| Error::ServerResolve(host.to_owned(), err))?;
+        let mut last = None;
+        for addr in addrs {
+            match Self::new(addr) {
+                Ok(client) => return Ok(client),
+                Err(err) => {
+                    debug!("{addr}: {err}");
+                    last = Some(err);
+                }
+            }
         }
-        let server = SocketAddr::new(server, PORT);
-        let sock = UdpSocket::bind(unspecified(server)).map_err(Error::JcpSocket)?;
-        sock.set_read_timeout(Some(TIMEOUT))
-            .map_err(Error::JcpSocket)?;
-        let local = local_addr_towards(server)?;
-        let mut client = Self {
-            local,
-            mac: [0; 6],
-            server,
-            sock,
-        };
-        client.mac = client.search()?;
-        Ok(client)
+        Err(match last {
+            Some(err) => Error::ServerUnreachable(host.to_owned(), Box::new(err)),
+            None => Error::ServerUnresolved(host.to_owned()),
+        })
     }
 
     /// Reserves the device on `port` and waits for its notification.
@@ -159,6 +165,24 @@ impl Client {
 
     pub(crate) fn server(&self) -> IpAddr {
         self.server.ip()
+    }
+
+    fn new(server: SocketAddr) -> Result<Self> {
+        if server.is_ipv6() {
+            return Err(Error::JcpIpv6NotImplemented);
+        }
+        let sock = UdpSocket::bind(unspecified(server)).map_err(Error::JcpSocket)?;
+        sock.set_read_timeout(Some(TIMEOUT))
+            .map_err(Error::JcpSocket)?;
+        let local = local_addr_towards(server)?;
+        let mut client = Self {
+            local,
+            mac: [0; 6],
+            server,
+            sock,
+        };
+        client.mac = client.search()?;
+        Ok(client)
     }
 
     /// Runs one command with the stop-and-wait chunk exchange.

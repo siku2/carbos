@@ -54,7 +54,11 @@ pub(crate) enum Error {
         len: usize,
     },
     ServerConnect(io::Error),
+    ServerResolve(String, io::Error),
     ServerSocket(io::Error),
+    ServerUnreachable(String, Box<Error>),
+    ServerUnresolved(String),
+    Signals(io::Error),
     Sysfs(PathBuf, io::Error),
     Usage,
     UsbipUnknownCommand(u32),
@@ -99,7 +103,11 @@ impl fmt::Display for Error {
             Self::NotifyTimeout => write!(f, "no notification from the server"),
             Self::NotifyTooShort { len } => write!(f, "notification of {len} bytes is too short"),
             Self::ServerConnect(_) => write!(f, "connecting to the server"),
+            Self::ServerResolve(host, _) => write!(f, "resolving {host}"),
             Self::ServerSocket(_) => write!(f, "server session"),
+            Self::ServerUnreachable(host, _) => write!(f, "no address of {host} answered"),
+            Self::ServerUnresolved(host) => write!(f, "{host} has no address"),
+            Self::Signals(_) => write!(f, "signal handler"),
             Self::Sysfs(path, _) => write!(f, "{}", path.display()),
             Self::Usage => write!(f, "invalid arguments"),
             Self::UsbipUnknownCommand(c) => write!(f, "unknown USB/IP command {c}"),
@@ -114,9 +122,12 @@ impl error::Error for Error {
             Self::JcpSocket(e)
             | Self::NotifySocket(e)
             | Self::ServerConnect(e)
+            | Self::ServerResolve(_, e)
             | Self::ServerSocket(e)
+            | Self::Signals(e)
             | Self::Sysfs(_, e)
             | Self::VhciSocket(e) => Some(e),
+            Self::ServerUnreachable(_, e) => Some(e.as_ref()),
             _ => None,
         }
     }
