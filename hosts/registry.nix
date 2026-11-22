@@ -5,6 +5,11 @@
         key = "carbon-x1-builder";
         machines = [ "station-h7" ];
       };
+      filamancer.hostKey = {
+        algorithm = "ssh-ed25519";
+        key = "AAAAC3NzaC1lZDI1NTE5AAAAIEy4wnM1zT0ceHibgs716kFUhLHzHTFrUM0du/0ZMpzg";
+        comment = "root@filamancer";
+      };
       mindaro = { };
       station-h7 = {
         hostKey = {
@@ -30,6 +35,11 @@
         algorithm = "ssh-ed25519";
         key = "AAAAC3NzaC1lZDI1NTE5AAAAIEb6hqkUuL+eDx7sTkBSoTbN4/iZ0+PIOnlyYdldiHn5";
         comment = "carbon-x1 builder";
+      };
+      itma-23001 = {
+        algorithm = "ssh-ed25519";
+        key = "AAAAC3NzaC1lZDI1NTE5AAAAIOYh6Y9KHLXpqgTbTjsy9ajqwVlZ+Tfc+0Cn/w/JiAK9";
+        comment = "itma-23001";
       };
     };
   };
