@@ -12,6 +12,7 @@
     ./firmware.nix
     ./gaming.nix
     ./hardware.nix
+    ./sxlink.nix
   ]
   ++ (with inputs.self.modules.nixos; [
     agents
@@ -31,6 +32,7 @@
     plotter
     remote
     shell
+    sxlink
     system
     vault
     vesktop
