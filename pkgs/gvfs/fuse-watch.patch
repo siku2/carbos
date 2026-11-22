@@ -1,0 +1,19 @@
+diff --git a/daemon/trashlib/trashwatcher.c b/daemon/trashlib/trashwatcher.c
+index 80a24d3..e777aef 100644
+--- a/daemon/trashlib/trashwatcher.c
++++ b/daemon/trashlib/trashwatcher.c
+@@ -84,9 +84,13 @@ decide_watch_type (GUnixMountEntry *mount,
+ 
+   fs_type = g_unix_mount_entry_get_fs_type (mount);
+ 
++  /* FUSE file systems such as sshfs or rclone are often backed by
++   * remote storage, so changes made elsewhere are not reported.
++   */
+   if (g_strcmp0 (fs_type, "nfs") == 0 ||
+       g_strcmp0 (fs_type, "nfs4") == 0 ||
+-      g_strcmp0 (fs_type, "cifs") == 0)
++      g_strcmp0 (fs_type, "cifs") == 0 ||
++      g_str_has_prefix (fs_type, "fuse."))
+     return TRASH_WATCHER_WATCH;
+   else
+     return TRASH_WATCHER_TRUSTED;
