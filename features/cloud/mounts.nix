@@ -13,6 +13,7 @@ let
   secretspecManifest = ../../secretspec.toml;
   secretspec = lib.getExe pkgs.secretspec;
   rclone = lib.getExe pkgs.rclone;
+  fusermount = "/run/wrappers/bin/fusermount3";
 
   webdav = {
     url = mkOption {
@@ -72,9 +73,15 @@ let
     };
     Service = {
       Type = "notify";
-      ExecStartPre = "${pkgs.coreutils}/bin/mkdir -p ${mountRoot}/${name}";
+      # Unmounting needs the setuid wrapper. A lazy unmount also works while
+      # the mount is busy, and clearing a stale mount first keeps a crashed
+      # rclone from blocking the restart.
+      ExecStartPre = [
+        "-${fusermount} -uz ${mountRoot}/${name}"
+        "${pkgs.coreutils}/bin/mkdir -p ${mountRoot}/${name}"
+      ];
       ExecStart = mountScript name mount;
-      ExecStop = "${pkgs.fuse3}/bin/fusermount3 -u ${mountRoot}/${name}";
+      ExecStop = "${fusermount} -uz ${mountRoot}/${name}";
       Restart = "on-failure";
       RestartSec = 10;
     };
