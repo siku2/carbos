@@ -53,10 +53,11 @@ let
         --reason "rclone needs the password to mount ${name}")
       RCLONE_CONFIG_REMOTE_PASS=$(printf '%s' "$password" | ${rclone} obscure -)
       export RCLONE_CONFIG_REMOTE_PASS
-      # GIO refuses to trash on a device named "none", so deletes go to the
-      # server's trash instead of a .Trash-<uid> folder on the remote.
+      ${lib.optionalString (mount.webdav.vendor == "nextcloud") ''
+        RCLONE_CONFIG_REMOTE_NEXTCLOUD_TRASH_DIR=".Trash-$(${pkgs.coreutils}/bin/id -u)"
+        export RCLONE_CONFIG_REMOTE_NEXTCLOUD_TRASH_DIR
+      ''}
       exec ${rclone} mount remote: ${mountRoot}/${name} \
-        --devname none \
         --vfs-cache-mode writes \
         --dir-cache-time 30s \
         --poll-interval 1m
