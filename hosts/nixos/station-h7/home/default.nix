@@ -27,6 +27,8 @@
 
   carbos.ardour.appearance.fontScale = 150;
 
+  carbos.plotter.port = "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A104ADD8-if00-port0";
+
   carbos.wallpaper = {
     width = 7680;
     height = 2160;

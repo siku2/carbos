@@ -28,6 +28,7 @@
     kicad
     mic
     nix
+    plotter
     remote
     shell
     system

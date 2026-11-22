@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>Plot (Fenta)</name>
+  <id>carbos.plotter.fenta</id>
+  <label>Convert all objects to paths first.</label>
+  <param name="serialPort" type="string" gui-hidden="true">@port@</param>
+  <param name="serialBaudRate" type="string" gui-hidden="true">38400</param>
+  <param name="feed" type="bool" gui-text="Feed the material after the job">true</param>
+  <param name="orientation" type="optiongroup" appearance="combo" gui-text="Rotation (degrees, clockwise):">
+    <option translatable="no" value="0">0</option>
+    <option translatable="no" value="90">90</option>
+    <option translatable="no" value="180">180</option>
+    <option translatable="no" value="270">270</option>
+  </param>
+  <param name="toolOffset" type="float" min="0.0" max="20.0" precision="2" gui-text="Knife offset (mm, 0 for a pen):">0.25</param>
+  <param name="overcut" type="float" min="0.0" max="100.0" precision="2" gui-text="Overcut (mm, 0 for a pen):">1.00</param>
+  <param name="precut" type="bool" gui-text="Precut to align the knife">true</param>
+  <param name="flat" type="float" min="0.1" max="10.0" precision="1" gui-text="Curve flatness (smaller is finer):">1.2</param>
+  <param name="autoAlign" type="bool" gui-text="Start the drawing at the head position">true</param>
+  <effect needs-live-preview="false" needs-document="true">
+    <object-type>path</object-type>
+    <effects-menu>
+      <submenu name="Export"/>
+    </effects-menu>
+  </effect>
+  <script>
+    <command location="inx" interpreter="python">fenta_plot.py</command>
+  </script>
+</inkscape-extension>
