@@ -133,14 +133,14 @@ let
 in
 clangStdenv.mkDerivation (finalAttrs: {
   pname = "kytyps5";
-  version = "0.3.0-unstable-2026-11-17";
+  version = "0.3.0-unstable-2026-11-24";
 
   src = fetchFromGitHub {
     owner = "KytyPS5";
     repo = "KytyPS5";
-    rev = "2638b1b07613dc32a4708d2cd61a75711b84b6cf";
+    rev = "b446af9d26e000b5dd93ecfc8bf5403ad500e9fd";
     fetchSubmodules = true;
-    hash = "sha256-CtHm6LjLiwMEibQpkuj0aqtsMnv7iv1Y9kyz2/rhD8Y=";
+    hash = "sha256-Pkpc2bKeC2wDgFfaGPKCAgr9O0nPfH9G2jAP/ATY2Zc=";
   };
 
   patches = [
