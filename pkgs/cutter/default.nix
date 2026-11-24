@@ -1,9 +1,12 @@
 {
   lib,
   stdenvNoCC,
+  curl,
   fetchurl,
-  nix-update-script,
+  gnused,
+  jq,
   undmg,
+  writeShellApplication,
 }:
 
 stdenvNoCC.mkDerivation rec {
@@ -31,7 +34,15 @@ stdenvNoCC.mkDerivation rec {
   # Any change to the bundle breaks the code signature.
   dontFixup = true;
 
-  passthru.updateScript = nix-update-script { extraArgs = [ "--flake" ]; };
+  passthru.updateScript = writeShellApplication {
+    name = "cutter-update";
+    runtimeInputs = [
+      curl
+      gnused
+      jq
+    ];
+    text = builtins.readFile ./update.sh;
+  };
 
   meta = {
     description = "Reverse engineering platform powered by Rizin";

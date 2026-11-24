@@ -56,10 +56,10 @@ let
       position = builtins.unsafeGetAttrPos "updateScript" (package.passthru or { });
       own = position != null && lib.hasPrefix (toString ../../../pkgs) position.file;
     in
-    lib.optional own "UPDATE_NIX_ATTR_PATH=${lib.concatStringsSep "." path} ${command}";
+    lib.optional (
+      own && (builtins.tryEval command).success
+    ) "UPDATE_NIX_ATTR_PATH=${lib.concatStringsSep "." path} ${command}";
 
-  # A directory that is a set of packages, like pkgs/device-firmware, has one level
-  # of members.
   updates =
     all:
     lib.concatMap (
@@ -67,9 +67,9 @@ let
       let
         value = all.${name};
       in
-      if isBuildable value then
+      if lib.isDerivation value then
         update [ name ] value
-      else if lib.isAttrs value && !lib.isDerivation value then
+      else if lib.isAttrs value then
         lib.concatLists (
           lib.mapAttrsToList (
             member:
@@ -77,7 +77,7 @@ let
               name
               member
             ]
-          ) (buildable value)
+          ) (lib.filterAttrs (_: lib.isDerivation) value)
         )
       else
         [ ]
