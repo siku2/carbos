@@ -15,7 +15,9 @@ in
     };
   };
 
-  users.users.${config.carbos.user.login}.openssh.authorizedKeys.keys = [ sshKeys.carbon-x1.line ];
+  users.users.${config.carbos.user.login}.openssh.authorizedKeys.keys = lib.mapAttrsToList (
+    _: key: key.line
+  ) (lib.filterAttrs (_: key: lib.elem config.networking.hostName key.login) sshKeys);
 
   programs.ssh.knownHosts = lib.mapAttrs (_: host: {
     hostNames = [ host.fqdn ];

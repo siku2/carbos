@@ -1,11 +1,4 @@
-{
-  config,
-  inputs,
-  ...
-}:
-let
-  inherit (config.carbos.registry) sshKeys;
-in
+{ config, inputs, ... }:
 {
   imports = [
     ./hardware.nix
@@ -19,8 +12,6 @@ in
   networking.hostName = "filamancer";
 
   time.timeZone = "Europe/Zurich";
-
-  users.users.${config.carbos.user.login}.openssh.authorizedKeys.keys = [ sshKeys.itma-23001.line ];
 
   home-manager.users.${config.carbos.user.login}.home.stateVersion = "26.05";
 

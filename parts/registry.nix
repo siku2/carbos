@@ -4,7 +4,7 @@ let
 
   cfg = config.carbos.registry;
 
-  sshKey = types.submodule (
+  sshKeyModule =
     { config, ... }:
     {
       options = {
@@ -36,8 +36,20 @@ let
           description = "The key as a public key line.";
         };
       };
+    };
+
+  sshKey = types.submodule sshKeyModule;
+
+  userKey = types.submodule [
+    sshKeyModule
+    {
+      options.login = mkOption {
+        type = types.listOf (types.enum (lib.attrNames cfg.hosts));
+        default = [ ];
+        description = "Hosts where the key may log in as the user.";
+      };
     }
-  );
+  ];
 
   # A name in sshKeys, resolved to the key itself.
   sshKeyName = types.enum (lib.attrNames cfg.sshKeys);
@@ -127,7 +139,7 @@ in
       default = { };
     };
     sshKeys = mkOption {
-      type = types.attrsOf sshKey;
+      type = types.attrsOf userKey;
       default = { };
       description = "Keys used to connect.";
     };
