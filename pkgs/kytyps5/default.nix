@@ -138,9 +138,9 @@ clangStdenv.mkDerivation (finalAttrs: {
   src = fetchFromGitHub {
     owner = "KytyPS5";
     repo = "KytyPS5";
-    rev = "b446af9d26e000b5dd93ecfc8bf5403ad500e9fd";
+    rev = "30781dcda029cbd669aa81337ac2902c9c3015d8";
     fetchSubmodules = true;
-    hash = "sha256-Pkpc2bKeC2wDgFfaGPKCAgr9O0nPfH9G2jAP/ATY2Zc=";
+    hash = "sha256-ngxfojg9GZRr90Xrsk5wt28VPt3Z5BJEaV+64FWM7qg=";
   };
 
   patches = [

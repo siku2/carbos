@@ -11,11 +11,11 @@
 # nixpkgs lags behind the releases by months and its fixup phase breaks the
 # code signature.
 teams.overrideAttrs (old: rec {
-  version = "26289.204.5281.6363";
+  version = "26304.1206.5384.1209";
 
   src = fetchurl {
     url = "https://statics.teams.cdn.office.net/production-osx/${version}/MicrosoftTeams.pkg";
-    hash = "sha256-OT4lNpGYBownFfPzKtIA3nEqdNkYSTTDnOHVxCs5zCw=";
+    hash = "sha256-UjwXOULxN134wo/pchcRMTy1ZFYlehgCU6gL8ndIvoM=";
   };
 
   dontFixup = true;
