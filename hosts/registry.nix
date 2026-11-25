@@ -14,6 +14,11 @@ in
         key = "AAAAC3NzaC1lZDI1NTE5AAAAIEy4wnM1zT0ceHibgs716kFUhLHzHTFrUM0du/0ZMpzg";
         comment = "root@filamancer";
       };
+      fizzy.hostKey = {
+        algorithm = "ssh-ed25519";
+        key = "AAAAC3NzaC1lZDI1NTE5AAAAILPvWIIUVf/kbop/ntjc5D4ndEzc9JrFwaNevTV0UsoU";
+        comment = "root@fizzy";
+      };
       mindaro = { };
       station-h7 = {
         hostKey = {
