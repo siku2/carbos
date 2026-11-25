@@ -92,6 +92,19 @@ let
     };
   };
 
+  # Only the tools of the methods in use go into the wrapper.
+  tools = {
+    fwupd = [ config.services.fwupd.package ];
+    samsungNvme = [ pkgs.nvme-cli ];
+    xmos = [ pkgs.xmosdfu ];
+    razerKeyboard = [ pkgs.razer-kbd-flash ];
+    amdGpu = [ pkgs.amd-psp-flash ];
+    esp = [ ];
+  };
+  methodsInUse = lib.unique (
+    lib.concatMap (device: lib.attrNames device.method) (lib.attrValues cfg.devices)
+  );
+
   device = types.submodule (
     { config, ... }:
     {
@@ -140,14 +153,7 @@ let
 
   firmware = pkgs.writeShellApplication {
     name = "firmware";
-    runtimeInputs = [
-      config.services.fwupd.package
-      pkgs.amd-psp-flash
-      pkgs.nodejs-slim
-      pkgs.nvme-cli
-      pkgs.razer-kbd-flash
-      pkgs.xmosdfu
-    ];
+    runtimeInputs = [ pkgs.nodejs-slim ] ++ lib.concatMap (name: tools.${name}) methodsInUse;
     text = ''
       exec node ${./firmware.ts} ${manifest} "$@"
     '';
