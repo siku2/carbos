@@ -148,6 +148,7 @@ in
 
       virtual_sdcard.path = "/var/lib/moonraker/gcodes";
       display_status = { };
+      force_move.enable_force_move = true;
       pause_resume = { };
       exclude_object = { };
     };
