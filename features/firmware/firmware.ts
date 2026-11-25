@@ -22,7 +22,17 @@ type Method =
   | { xmos: { vendorId: string; productId: string; image: string } }
   | { razerKeyboard: { image: string } }
   | { amdGpu: { pciId: string; subsystemId: string; images: string[] } }
-  | { esp: { image: string } };
+  | { esp: { image: string } }
+  | {
+      avrIsp: {
+        programmer: string;
+        programmerUsbId: string;
+        part: string;
+        fuses: { low: string; high: string; extended: string };
+        image: string;
+        stopUnits: string[];
+      };
+    };
 
 interface Device {
   description: string;
@@ -50,6 +60,8 @@ interface Result {
   image: string;
   time: string;
   ok: boolean;
+  // The version the flash installed, for devices that cannot report it.
+  version?: string;
 }
 
 interface Adapter {
@@ -592,6 +604,93 @@ function espAdapter(
   };
 }
 
+// Every ISP access holds the AVR in reset, so only the flash touches it. The
+// version is the one the last flash recorded.
+function avrIspAdapter(
+  name: string,
+  device: Device,
+  method: Extract<Method, { avrIsp: unknown }>["avrIsp"],
+  state: string,
+): Adapter {
+  const image = join(device.package, method.image);
+  const format = image.endsWith(".elf")
+    ? "e"
+    : image.endsWith(".hex")
+      ? "i"
+      : "r";
+  const file = join(state, `${name}.json`);
+  const avrdude = (args: string[]) => [
+    "-c",
+    method.programmer,
+    "-p",
+    method.part,
+    ...args,
+  ];
+  const fuses = ["lfuse", "hfuse", "efuse"];
+  const expected = [method.fuses.low, method.fuses.high, method.fuses.extended];
+  return {
+    current: () => {
+      const [vendorId = "", productId = ""] = method.programmerUsbId.split(":");
+      if (usbRelease(vendorId, productId) === undefined) return undefined;
+      if (!existsSync(file)) return "unknown";
+      const result = JSON.parse(readFileSync(file, "utf8")) as Result;
+      return result.ok && result.version !== undefined
+        ? result.version
+        : "unknown";
+    },
+    flash: () => {
+      const readFuses = avrdude([
+        "-n",
+        ...fuses.flatMap((fuse) => ["-U", `${fuse}:r:-:h`]),
+      ]);
+      if (method.stopUnits.length > 0) {
+        write("systemctl", ["stop", ...method.stopUnits]);
+      }
+      let ok = false;
+      try {
+        // avrdude also checks the signature against the part on every run.
+        if (dryRun) {
+          console.log(`would run avrdude ${readFuses.join(" ")}`);
+        } else {
+          const read = run("avrdude", readFuses)
+            .split("\n")
+            .filter((line) => line.startsWith("0x"))
+            .map((line) => line.slice(2).padStart(2, "0").toLowerCase());
+          if (read.join(" ") !== expected.join(" ")) {
+            throw new Failure(
+              `fuses are ${read.join(" ")}, expected ${expected.join(" ")}`,
+            );
+          }
+        }
+        ok = write(
+          "avrdude",
+          avrdude(["-e", "-U", `flash:w:${image}:${format}`]),
+        );
+        if (!dryRun) {
+          mkdirSync(state, { recursive: true });
+          const result: Result = {
+            device: name,
+            image,
+            time: new Date().toISOString(),
+            ok,
+            version: device.version,
+          };
+          writeFileSync(file, JSON.stringify(result));
+        }
+      } finally {
+        if (method.stopUnits.length > 0) {
+          write("systemctl", ["start", ...method.stopUnits]);
+        }
+      }
+      if (!ok) {
+        throw new Failure(
+          "avrdude failed, the flash is in an unknown state, run the flash again",
+        );
+      }
+    },
+  };
+}
+
 function adapter(name: string, device: Device, manifest: Manifest): Adapter {
   const method = device.method;
   if ("fwupd" in method) return fwupdAdapter(device, method.fwupd);
@@ -602,6 +701,8 @@ function adapter(name: string, device: Device, manifest: Manifest): Adapter {
     return razerKeyboardAdapter(device, method.razerKeyboard);
   if ("amdGpu" in method)
     return amdGpuAdapter(name, device, method.amdGpu, manifest);
+  if ("avrIsp" in method)
+    return avrIspAdapter(name, device, method.avrIsp, manifest.state);
   return espAdapter(name, device, method.esp, manifest.esp);
 }
 

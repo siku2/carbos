@@ -90,6 +90,45 @@ let
     esp = method "Copy the image to the ESP for the firmware setup to flash." {
       image = image "The image in the package that the firmware setup flashes.";
     };
+
+    avrIsp = method "Flash an AVR over ISP with avrdude." {
+      programmer = mkOption {
+        type = types.str;
+        example = "pickit_basic_isp";
+        description = "The avrdude programmer ID.";
+      };
+      programmerUsbId = mkOption {
+        type = types.strMatching "[0-9a-f]{4}:[0-9a-f]{4}";
+        example = "04d8:9055";
+        description = "USB vendor and product ID of the programmer, which tells whether it is connected.";
+      };
+      part = mkOption {
+        type = types.str;
+        example = "m1281";
+        description = "The avrdude part ID.";
+      };
+      fuses =
+        let
+          fuse =
+            description:
+            mkOption {
+              type = types.strMatching "[0-9a-f]{2}";
+              inherit description;
+            };
+        in
+        {
+          low = fuse "Expected low fuse in hex.";
+          high = fuse "Expected high fuse in hex.";
+          extended = fuse "Expected extended fuse in hex.";
+        };
+      image = image "The image in the package, as ELF, Intel HEX (.hex) or raw binary.";
+      stopUnits = mkOption {
+        type = types.listOf types.str;
+        default = [ ];
+        example = [ "klipper.service" ];
+        description = "Units that use the device, stopped during the flash and started again after.";
+      };
+    };
   };
 
   # Only the tools of the methods in use go into the wrapper.
@@ -100,6 +139,7 @@ let
     razerKeyboard = [ pkgs.razer-kbd-flash ];
     amdGpu = [ pkgs.amd-psp-flash ];
     esp = [ ];
+    avrIsp = [ pkgs.avrdude ];
   };
   methodsInUse = lib.unique (
     lib.concatMap (device: lib.attrNames device.method) (lib.attrValues cfg.devices)
