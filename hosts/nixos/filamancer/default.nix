@@ -2,6 +2,7 @@
 {
   imports = [
     ./hardware.nix
+    ./macros.nix
     ./printer.nix
     ./wifi.nix
   ]
