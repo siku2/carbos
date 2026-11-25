@@ -2,9 +2,11 @@
 {
   imports = [
     ./hardware.nix
+    ./printer.nix
     ./wifi.nix
   ]
   ++ (with inputs.self.modules.nixos; [
+    firmware
     nix
     remote
   ]);
