@@ -605,7 +605,8 @@ function espAdapter(
 }
 
 // Every ISP access holds the AVR in reset, so only the flash touches it. The
-// version is the one the last flash recorded.
+// version is the one the last flash recorded. A different image path means the
+// same version was built differently, for example with another config.
 function avrIspAdapter(
   name: string,
   device: Device,
@@ -634,9 +635,10 @@ function avrIspAdapter(
       if (usbRelease(vendorId, productId) === undefined) return undefined;
       if (!existsSync(file)) return "unknown";
       const result = JSON.parse(readFileSync(file, "utf8")) as Result;
-      return result.ok && result.version !== undefined
+      if (!result.ok || result.version === undefined) return "unknown";
+      return result.image === image
         ? result.version
-        : "unknown";
+        : `${result.version} (other build)`;
     },
     flash: () => {
       const readFuses = avrdude([
