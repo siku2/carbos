@@ -102,7 +102,7 @@ in
         }
         // {
           endstop_pin = "!PG2";
-          position_endstop = 0;
+          position_endstop = "1.1";
           position_max = 190;
           homing_speed = 5;
         };
