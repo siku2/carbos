@@ -1,5 +1,8 @@
-{ pkgs, ... }:
+{ config, pkgs, ... }:
 let
+  inherit (config.networking) fqdn;
+  tls = "/var/lib/nginx-tls";
+
   mcuFirmware = pkgs.klipper-firmware.override {
     mcu = "profi3dmaker";
     firmwareConfig = ./klipper-mcu.config;
@@ -155,6 +158,55 @@ in
     settings.authorization.trusted_clients = [
       "127.0.0.0/8"
       "::1/128"
+      "10.0.0.0/20"
+      "fde4:82a1:9c3f:1::/64"
+      "fe80::/10"
     ];
   };
+
+  networking.domain = "local.bg12.ch";
+
+  services.mainsail = {
+    enable = true;
+    hostName = fqdn;
+    nginx = {
+      default = true;
+      forceSSL = true;
+      sslCertificate = "${tls}/cert.pem";
+      sslCertificateKey = "${tls}/key.pem";
+    };
+  };
+
+  # A self-signed certificate, made once. openssl writes the key as 0600, so
+  # the group read for nginx comes after.
+  systemd.services.nginx-tls = {
+    description = "Create the self-signed nginx certificate";
+    wantedBy = [ "nginx.service" ];
+    before = [ "nginx.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      StateDirectory = "nginx-tls";
+      StateDirectoryMode = "0750";
+      Group = "nginx";
+    };
+    script = ''
+      if [ ! -e ${tls}/cert.pem ]; then
+        ${pkgs.openssl}/bin/openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 \
+          -nodes -days 3650 -subj "/CN=${fqdn}" -addext "subjectAltName=DNS:${fqdn}" \
+          -keyout ${tls}/key.pem -out ${tls}/cert.pem
+      fi
+      chmod 0640 ${tls}/key.pem ${tls}/cert.pem
+    '';
+  };
+
+  services.nginx = {
+    # Moonraker reads the client address from the proxy headers.
+    recommendedProxySettings = true;
+    clientMaxBodySize = "1g";
+  };
+
+  networking.firewall.allowedTCPPorts = [
+    80
+    443
+  ];
 }
