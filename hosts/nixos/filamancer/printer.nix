@@ -120,11 +120,11 @@ in
           heater_pin = "PE4";
           sensor_type = "EPCOS 100K B57560G104F";
           sensor_pin = "PF0";
-          # Placeholders until PID_CALIBRATE.
+          # PID_CALIBRATE at 210 with the case on.
           control = "pid";
-          pid_kp = 22.2;
-          pid_ki = 1.08;
-          pid_kd = 114;
+          pid_kp = "26.595";
+          pid_ki = "1.673";
+          pid_kd = "105.713";
           min_temp = 0;
           max_temp = 250;
         };
