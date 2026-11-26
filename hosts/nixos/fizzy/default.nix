@@ -10,6 +10,7 @@
     remote
     shell
     system
+    waydroid
   ]);
 
   networking.hostName = "fizzy";
