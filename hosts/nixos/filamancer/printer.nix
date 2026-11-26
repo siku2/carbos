@@ -126,7 +126,7 @@ in
           pid_ki = "1.673";
           pid_kd = "105.713";
           min_temp = 0;
-          max_temp = 250;
+          max_temp = 265;
         };
 
       heater_bed = {
