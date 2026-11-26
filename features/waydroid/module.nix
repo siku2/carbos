@@ -19,22 +19,12 @@ in
     };
 
     apps = mkOption {
-      type = types.attrsOf (
-        types.submodule {
-          options = {
-            versionCode = mkOption {
-              type = types.ints.positive;
-            };
-            hash = mkOption {
-              type = types.str;
-            };
-          };
-        }
-      );
-      default = { };
+      type = types.listOf types.package;
+      default = [ ];
       description = ''
-        F-Droid apps by package name. An app is installed when it is missing
-        or older than the pinned version. Newer versions are left alone.
+        APKs to install, each with `packageName` and `versionCode` in
+        passthru. An app is installed when it is missing or older than the
+        pinned version. Newer versions are left alone.
       '';
     };
   };

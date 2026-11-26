@@ -20,21 +20,8 @@ let
     )
   );
 
-  apk =
-    name: app:
-    pkgs.fetchurl {
-      # F-Droid moves older versions from repo to archive.
-      urls = map (dir: "https://f-droid.org/${dir}/${name}_${toString app.versionCode}.apk") [
-        "repo"
-        "archive"
-      ];
-      inherit (app) hash;
-    };
-
   apps = pkgs.writeText "android-apps" (
-    lib.concatLines (
-      lib.mapAttrsToList (name: app: "${name} ${toString app.versionCode} ${apk name app}") cfg.apps
-    )
+    lib.concatLines (map (apk: "${apk.packageName} ${toString apk.versionCode} ${apk}") cfg.apps)
   );
 
   bridge = pkgs.writeShellApplication {
