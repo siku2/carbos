@@ -20,4 +20,11 @@
     };
     sensor.iio.enable = true;
   };
+
+  # The touch button below the screen sends the Windows key. Android treats
+  # KEY_HOMEPAGE as its home button.
+  services.udev.extraHwdb = ''
+    evdev:atkbd:dmi:bvn*:bvr*:bd*:svnPanasonicCorporation:pnFZM1*:*
+     KEYBOARD_KEY_db=homepage
+  '';
 }
