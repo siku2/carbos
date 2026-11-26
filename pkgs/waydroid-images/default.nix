@@ -1,8 +1,12 @@
 {
   lib,
+  curl,
   fetchurl,
+  gnused,
+  jq,
   runCommand,
   unzip,
+  writeShellApplication,
 }:
 let
   image =
@@ -31,9 +35,20 @@ let
     hash = "sha256-kWY8M3ATFFIItsUz1+H6KpFamGTdyPxWlm9AzXWWSKw=";
   };
 in
-runCommand "waydroid-images-20.0-20261022"
+runCommand "waydroid-images"
   {
     nativeBuildInputs = [ unzip ];
+
+    passthru.updateScript = writeShellApplication {
+      name = "waydroid-images-update";
+      runtimeInputs = [
+        curl
+        gnused
+        jq
+      ];
+      text = builtins.readFile ./update.sh;
+    };
+
     meta = {
       description = "LineageOS system and vendor images for Waydroid";
       platforms = [ "x86_64-linux" ];
