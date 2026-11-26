@@ -156,6 +156,8 @@ in
 
   services.moonraker = {
     enable = true;
+    # Slicers upload through the OctoPrint API.
+    settings.octoprint_compat = { };
     settings.authorization.trusted_clients = [
       "127.0.0.0/8"
       "::1/128"
@@ -164,6 +166,9 @@ in
       "fe80::/10"
     ];
   };
+
+  # The module does not restart Moonraker when its config changes.
+  systemd.services.moonraker.restartTriggers = [ config.environment.etc."moonraker.cfg".source ];
 
   networking.domain = "local.bg12.ch";
 
