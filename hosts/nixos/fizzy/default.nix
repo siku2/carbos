@@ -1,6 +1,7 @@
 { config, inputs, ... }:
 {
   imports = [
+    ./android.nix
     ./disk.nix
     ./hardware.nix
   ]
