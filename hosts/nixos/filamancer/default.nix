@@ -3,6 +3,7 @@
   imports = [
     ./hardware.nix
     ./macros.nix
+    ./orca.nix
     ./printer.nix
     ./wifi.nix
   ]
