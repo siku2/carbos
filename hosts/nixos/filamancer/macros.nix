@@ -1,5 +1,15 @@
 { lib, ... }:
 let
+  machine = import ./machine.nix;
+  inherit (machine) str;
+
+  # A 100 mm purge line, 0.6 nozzle widths high and 1.2 wide.
+  purge = rec {
+    height = 0.6 * machine.nozzle;
+    filamentArea = 3.14159 * machine.filament * machine.filament / 4;
+    extrude = height * 1.2 * machine.nozzle * 100 / filamentArea;
+  };
+
   # The klipper module writes each list item as an indented line.
   lines = text: lib.filter (line: line != "") (lib.splitString "\n" text);
 
@@ -33,8 +43,8 @@ in
         M109 S{extruder}
         M83
         G1 X10 Y5 F6000
-        G1 Z0.3 F600
-        G1 X110 E10 F1200
+        G1 Z${str purge.height} F600
+        G1 X110 E${str purge.extrude} F600
         G1 Z2 F600
       '';
     };

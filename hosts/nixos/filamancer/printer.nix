@@ -1,5 +1,11 @@
-{ config, pkgs, ... }:
+{
+  config,
+  pkgs,
+  ...
+}:
 let
+  machine = import ./machine.nix;
+  inherit (machine) bed str;
   inherit (config.networking) fqdn;
   tls = "/var/lib/nginx-tls";
 
@@ -58,10 +64,10 @@ in
 
       printer = {
         kinematics = "cartesian";
-        max_velocity = 200;
-        max_accel = 1000;
-        max_z_velocity = 5;
-        max_z_accel = 50;
+        max_velocity = machine.velocity;
+        max_accel = machine.accel;
+        max_z_velocity = machine.zVelocity;
+        max_z_accel = machine.zAccel;
       };
 
       # The endstops pull low when triggered. The board has its own pull-ups.
@@ -75,7 +81,7 @@ in
         // {
           endstop_pin = "!PG0";
           position_endstop = 0;
-          position_max = 400;
+          position_max = bed.x;
           homing_speed = 25;
         };
 
@@ -88,8 +94,8 @@ in
         }
         // {
           endstop_pin = "!PG1";
-          position_endstop = 260;
-          position_max = 260;
+          position_endstop = bed.y;
+          position_max = bed.y;
           homing_speed = 25;
         };
 
@@ -103,7 +109,7 @@ in
         // {
           endstop_pin = "!PG2";
           position_endstop = "1.1";
-          position_max = 190;
+          position_max = machine.height;
           homing_speed = 5;
         };
 
@@ -115,8 +121,8 @@ in
           rotationDistance = "7.831620";
         }
         // {
-          nozzle_diameter = 0.4;
-          filament_diameter = 1.75;
+          nozzle_diameter = str machine.nozzle;
+          filament_diameter = str machine.filament;
           heater_pin = "PE4";
           sensor_type = "EPCOS 100K B57560G104F";
           sensor_pin = "PF0";
